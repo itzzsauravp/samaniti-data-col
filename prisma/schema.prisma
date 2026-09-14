@@ -6,52 +6,131 @@ datasource db {
   provider = "postgresql"
 }
 
-enum ContentType {
-  POLICY
-  PROJECT
-  REPORT
-  NOTICE
-}
-
 model Municipality {
-  id        String                @id @default(uuid())
-  code      String                @unique
-  nameNe    String
-  nameEn    String
-  province  String
-  district  String
-  profile   MunicipalityProfile?
-  publications Publication[]
+  id       String               @id @default(uuid())
+  code     String               @unique // e.g., "eakdara-mun"
+  nameNe   String               @map("name_ne")
+  nameEn   String               @map("name_en")
+  province String
+  district String
+  profile  MunicipalityProfile?
+
+  // Relations
+  projects Project[]
+  reports  Report[]
+  notices  Notice[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("municipalities")
 }
 
 model MunicipalityProfile {
-  id                String       @id @default(uuid())
-  establishedBs     String?
-  totalWards        Int?
-  population        Int?
-  areaSqKm          Float?
-  includedVdcsNe    String?
-  email             String?
-  website           String?
-  facebookPage      String?
-  mobileNo          String?
-  twitterHandle     String?
-  totalSchools      Int?
-  municipalityId    String       @unique
-  municipality      Municipality @relation(fields: [municipalityId], references: [id])
+  id             String       @id @default(uuid())
+  establishedBs  String?      @map("established_bs")
+  totalWards     Int?         @map("total_wards")
+  population     Int?
+  areaSqKm       Float?       @map("area_sq_km")
+  includedVdcsNe String?      @map("included_vdcs_ne")
+  email          String?
+  website        String?
+  facebookPage   String?      @map("facebook_page")
+  mobileNo       String?      @map("mobile_no")
+  twitterHandle  String?      @map("twitter_handle")
+  totalSchools   Int?         @map("total_schools")
+  municipalityId String       @unique @map("municipality_id")
+  municipality   Municipality @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("municipality_profiles")
 }
 
-model Publication {
-  id              String       @id @default(uuid())
-  titleNe         String
-  titleEn         String?
-  descriptionNe   String?
-  publishedDateBs String?
-  publishedDateAd DateTime?
-  sourceUrl       String       @unique
-  fileUrl         String?
-  storagePath     String?
-  contentType     ContentType
-  municipalityId  String
-  municipality    Municipality @relation(fields: [municipalityId], references: [id])
+// 1. कार्यक्रम तथा परियोजना (Projects)
+model Project {
+  id             String       @id @default(uuid())
+  municipalityId String       @map("municipality_id")
+  municipality   Municipality @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+
+  titleNe      String   @map("title_ne") // project name in Nepali
+  titleEn      String?  @map("title_en")
+  budgetAmount Decimal? @map("budget_amount") // project cost/budget
+  fiscalYear   String?  @map("fiscal_year") // e.g., "२०८०/८१"
+  status       String? // e.g., "Planned", "Ongoing", "Completed"
+  wardNo       Int?     @map("ward_no") // associated ward number if applicable
+  sourceUrl    String   @unique @map("source_url") // prevents scraping duplicate records
+
+  documents Document[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("projects")
+}
+
+// 2. प्रतिवेदन (Reports)
+model Report {
+  id             String       @id @default(uuid())
+  municipalityId String       @map("municipality_id")
+  municipality   Municipality @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+
+  titleNe       String  @map("title_ne")
+  titleEn       String? @map("title_en")
+  reportType    String? @map("report_type") // e.g., "Annual Report", "Audit", "Progress"
+  fiscalYear    String? @map("fiscal_year") // e.g., "२०८०/८१"
+  publishedDate String? @map("published_date") // BS date string
+  sourceUrl     String  @unique @map("source_url")
+
+  documents Document[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("reports")
+}
+
+// 3. सूचना तथा जानकारी (Notices)
+model Notice {
+  id             String       @id @default(uuid())
+  municipalityId String       @map("municipality_id")
+  municipality   Municipality @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+
+  titleNe       String  @map("title_ne")
+  titleEn       String? @map("title_en")
+  contentNe     String? @map("content_ne") // full body text if notice is written directly on page
+  noticeType    String? @map("notice_type") // e.g., "Tender", "General", "Press Release"
+  publishedDate String? @map("published_date") // BS date string
+  sourceUrl     String  @unique @map("source_url")
+
+  documents Document[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("notices")
+}
+
+// 4. Central Document Attachment Table
+model Document {
+  id          String  @id @default(uuid())
+  fileName    String  @map("file_name") // e.g., "budget_report_2080.pdf"
+  fileType    String? @map("file_type") // e.g., "application/pdf"
+  originalUrl String  @map("original_url") // Direct URL on government website
+  storagePath String? @map("storage_path") // Path in your S3 bucket / local server directory
+
+  // Optional relations (a document belongs to one parent entity)
+  projectId String?  @map("project_id")
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  reportId String? @map("report_id")
+  report   Report? @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  noticeId String? @map("notice_id")
+  notice   Notice? @relation(fields: [noticeId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("documents")
 }

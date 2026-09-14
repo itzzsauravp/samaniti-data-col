@@ -1,30 +1,65 @@
-import { PrismaClient } from '@prisma/client';
-import { MunicipalityProfileData, PublicationData } from '../types/domain.js';
+import "dotenv/config";
+import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import {
+  MunicipalityData,
+  MunicipalityProfileData,
+  ProjectData,
+  ReportData,
+  NoticeData,
+  DocumentData,
+  EtlPayload,
+} from "../types/domain.js";
 
-export const prisma = new PrismaClient();
+if (!process.env.DATABASE_URL) {
+  throw new Error('[loader] DATABASE_URL environment variable is not set.');
+}
 
-export async function upsertMunicipalityProfile(data: MunicipalityProfileData): Promise<void> {
+// PrismaPg accepts a connection string, pg.PoolConfig, or pg.Pool directly.
+const adapter = new PrismaPg(process.env.DATABASE_URL);
+export const prisma = new PrismaClient({ adapter });
+
+/**
+ * Creates or updates the primary Municipality entry.
+ */
+export async function upsertMunicipality(data: MunicipalityData) {
+  return await prisma.municipality.upsert({
+    where: { code: data.code },
+    update: {
+      nameNe: data.nameNe,
+      nameEn: data.nameEn,
+      province: data.province,
+      district: data.district,
+    },
+    create: {
+      code: data.code,
+      nameNe: data.nameNe,
+      nameEn: data.nameEn,
+      province: data.province,
+      district: data.district,
+    },
+  });
+}
+
+/**
+ * Creates or updates profile overview data for a municipality.
+ */
+export async function upsertMunicipalityProfile(
+  data: MunicipalityProfileData,
+): Promise<void> {
   const { municipalityCode, ...profileFields } = data;
 
-  // Ensure the Municipality record exists
-  const municipality = await prisma.municipality.upsert({
+  const municipality = await prisma.municipality.findUnique({
     where: { code: municipalityCode },
-    update: {},
-    create: {
-      code: municipalityCode,
-      nameNe: municipalityCode,
-      nameEn: municipalityCode,
-      province: 'Unknown',
-      district: 'Unknown',
-    },
   });
 
-  // Upsert the profile linked to the municipality
+  if (!municipality) {
+    throw new Error(`Municipality with code '${municipalityCode}' not found.`);
+  }
+
   await prisma.municipalityProfile.upsert({
     where: { municipalityId: municipality.id },
-    update: {
-      ...profileFields,
-    },
+    update: { ...profileFields },
     create: {
       ...profileFields,
       municipalityId: municipality.id,
@@ -32,48 +67,148 @@ export async function upsertMunicipalityProfile(data: MunicipalityProfileData): 
   });
 }
 
-export async function upsertPublication(data: PublicationData): Promise<void> {
-  const { municipalityCode, ...pubFields } = data;
+/**
+ * Maps input document objects into standard Prisma nested creation queries.
+ */
+function buildDocumentNestedQuery(docs?: DocumentData[]) {
+  if (!docs || docs.length === 0) return undefined;
+  return {
+    create: docs.map((doc) => ({
+      fileName: doc.fileName,
+      fileType: doc.fileType,
+      originalUrl: doc.originalUrl,
+      storagePath: doc.storagePath,
+    })),
+  };
+}
 
-  // Ensure the Municipality record exists
-  const municipality = await prisma.municipality.upsert({
+/**
+ * Upserts a Project record and links attached documents using `sourceUrl` as unique key.
+ */
+export async function upsertProject(data: ProjectData): Promise<void> {
+  const { municipalityCode, documents, ...projectFields } = data;
+
+  const municipality = await prisma.municipality.findUnique({
     where: { code: municipalityCode },
-    update: {},
-    create: {
-      code: municipalityCode,
-      nameNe: municipalityCode,
-      nameEn: municipalityCode,
-      province: 'Unknown',
-      district: 'Unknown',
-    },
   });
 
-  await prisma.publication.upsert({
-    where: { sourceUrl: pubFields.sourceUrl },
+  if (!municipality) {
+    throw new Error(`Municipality with code '${municipalityCode}' not found.`);
+  }
+
+  await prisma.project.upsert({
+    where: { sourceUrl: projectFields.sourceUrl },
     update: {
-      titleNe: pubFields.titleNe,
-      titleEn: pubFields.titleEn,
-      descriptionNe: pubFields.descriptionNe,
-      publishedDateBs: pubFields.publishedDateBs,
-      publishedDateAd: pubFields.publishedDateAd,
-      fileUrl: pubFields.fileUrl,
-      storagePath: pubFields.storagePath,
-      contentType: pubFields.contentType,
+      titleNe: projectFields.titleNe,
+      titleEn: projectFields.titleEn,
+      budgetAmount: projectFields.budgetAmount,
+      fiscalYear: projectFields.fiscalYear,
+      status: projectFields.status,
+      wardNo: projectFields.wardNo,
       municipalityId: municipality.id,
     },
     create: {
-      ...pubFields,
+      ...projectFields,
       municipalityId: municipality.id,
+      documents: buildDocumentNestedQuery(documents),
     },
   });
 }
 
-export async function loadEtlData(payload: {
-  profile: MunicipalityProfileData;
-  publications: PublicationData[];
-}): Promise<void> {
-  await upsertMunicipalityProfile(payload.profile);
-  for (const publication of payload.publications) {
-    await upsertPublication(publication);
+/**
+ * Upserts a Report record and links attached documents using `sourceUrl` as unique key.
+ */
+export async function upsertReport(data: ReportData): Promise<void> {
+  const { municipalityCode, documents, ...reportFields } = data;
+
+  const municipality = await prisma.municipality.findUnique({
+    where: { code: municipalityCode },
+  });
+
+  if (!municipality) {
+    throw new Error(`Municipality with code '${municipalityCode}' not found.`);
+  }
+
+  await prisma.report.upsert({
+    where: { sourceUrl: reportFields.sourceUrl },
+    update: {
+      titleNe: reportFields.titleNe,
+      titleEn: reportFields.titleEn,
+      reportType: reportFields.reportType,
+      fiscalYear: reportFields.fiscalYear,
+      publishedDate: reportFields.publishedDate,
+      municipalityId: municipality.id,
+    },
+    create: {
+      ...reportFields,
+      municipalityId: municipality.id,
+      documents: buildDocumentNestedQuery(documents),
+    },
+  });
+}
+
+/**
+ * Upserts a Notice record and links attached documents using `sourceUrl` as unique key.
+ */
+export async function upsertNotice(data: NoticeData): Promise<void> {
+  const { municipalityCode, documents, ...noticeFields } = data;
+
+  const municipality = await prisma.municipality.findUnique({
+    where: { code: municipalityCode },
+  });
+
+  if (!municipality) {
+    throw new Error(`Municipality with code '${municipalityCode}' not found.`);
+  }
+
+  await prisma.notice.upsert({
+    where: { sourceUrl: noticeFields.sourceUrl },
+    update: {
+      titleNe: noticeFields.titleNe,
+      titleEn: noticeFields.titleEn,
+      contentNe: noticeFields.contentNe,
+      noticeType: noticeFields.noticeType,
+      publishedDate: noticeFields.publishedDate,
+      municipalityId: municipality.id,
+    },
+    create: {
+      ...noticeFields,
+      municipalityId: municipality.id,
+      documents: buildDocumentNestedQuery(documents),
+    },
+  });
+}
+
+/**
+ * Master loader method to run all domain upserts sequentially for a scraper execution.
+ */
+export async function loadEtlData(payload: EtlPayload): Promise<void> {
+  // 1. Upsert target municipality base record
+  await upsertMunicipality(payload.municipality);
+
+  // 2. Upsert profile attributes if present
+  if (payload.profile) {
+    await upsertMunicipalityProfile(payload.profile);
+  }
+
+  // 3. Upsert projects list
+  if (payload.projects && payload.projects.length > 0) {
+    for (const project of payload.projects) {
+      await upsertProject(project);
+    }
+  }
+
+  // 4. Upsert reports list
+  if (payload.reports && payload.reports.length > 0) {
+    for (const report of payload.reports) {
+      await upsertReport(report);
+    }
+  }
+
+  // 5. Upsert notices list
+  if (payload.notices && payload.notices.length > 0) {
+    for (const notice of payload.notices) {
+      await upsertNotice(notice);
+    }
   }
 }

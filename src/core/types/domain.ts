@@ -1,4 +1,10 @@
-import { ContentType } from '@prisma/client';
+export interface MunicipalityData {
+  code: string;
+  nameNe: string;
+  nameEn: string;
+  province: string;
+  district: string;
+}
 
 export interface MunicipalityProfileData {
   municipalityCode: string;
@@ -15,15 +21,51 @@ export interface MunicipalityProfileData {
   totalSchools?: number | null;
 }
 
-export interface PublicationData {
+export interface DocumentData {
+  fileName: string;
+  fileType?: string | null;
+  originalUrl: string;
+  storagePath?: string | null;
+}
+
+export interface ProjectData {
   municipalityCode: string;
   titleNe: string;
   titleEn?: string | null;
-  descriptionNe?: string | null;
-  publishedDateBs?: string | null;
-  publishedDateAd?: Date | null;
+  budgetAmount?: number | null;
+  fiscalYear?: string | null;
+  status?: string | null;
+  wardNo?: number | null;
   sourceUrl: string;
-  fileUrl?: string | null;
-  storagePath?: string | null;
-  contentType: ContentType;
+  documents?: DocumentData[];
+}
+
+export interface ReportData {
+  municipalityCode: string;
+  titleNe: string;
+  titleEn?: string | null;
+  reportType?: string | null;
+  fiscalYear?: string | null;
+  publishedDate?: string | null;
+  sourceUrl: string;
+  documents?: DocumentData[];
+}
+
+export interface NoticeData {
+  municipalityCode: string;
+  titleNe: string;
+  titleEn?: string | null;
+  contentNe?: string | null;
+  noticeType?: string | null;
+  publishedDate?: string | null;
+  sourceUrl: string;
+  documents?: DocumentData[];
+}
+
+export interface EtlPayload {
+  municipality: MunicipalityData;
+  profile?: MunicipalityProfileData;
+  projects?: ProjectData[];
+  reports?: ReportData[];
+  notices?: NoticeData[];
 }
