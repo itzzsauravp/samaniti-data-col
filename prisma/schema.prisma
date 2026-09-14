@@ -1,0 +1,57 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ContentType {
+  POLICY
+  PROJECT
+  REPORT
+  NOTICE
+}
+
+model Municipality {
+  id        String                @id @default(uuid())
+  code      String                @unique
+  nameNe    String
+  nameEn    String
+  province  String
+  district  String
+  profile   MunicipalityProfile?
+  publications Publication[]
+}
+
+model MunicipalityProfile {
+  id                String       @id @default(uuid())
+  establishedBs     String?
+  totalWards        Int?
+  population        Int?
+  areaSqKm          Float?
+  includedVdcsNe    String?
+  email             String?
+  website           String?
+  facebookPage      String?
+  mobileNo          String?
+  twitterHandle     String?
+  totalSchools      Int?
+  municipalityId    String       @unique
+  municipality      Municipality @relation(fields: [municipalityId], references: [id])
+}
+
+model Publication {
+  id              String       @id @default(uuid())
+  titleNe         String
+  titleEn         String?
+  descriptionNe   String?
+  publishedDateBs String?
+  publishedDateAd DateTime?
+  sourceUrl       String       @unique
+  fileUrl         String?
+  storagePath     String?
+  contentType     ContentType
+  municipalityId  String
+  municipality    Municipality @relation(fields: [municipalityId], references: [id])
+}
