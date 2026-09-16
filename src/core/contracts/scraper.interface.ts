@@ -5,7 +5,8 @@ export interface ScraperConfig {
 }
 
 export interface RouteConfig {
-  type: string; // e.g., 'profile', 'notices', 'reports', 'projects'
+  type: string; // e.g., "profile", "notices", "reports", "projects"
+  subFolder?: string; // Optional folder name (e.g. "annual_progress_report"). If omitted, derived from URL slug
   live: string; // live HTTP URL (first/listing page)
   mock: string; // local absolute path to mock listing HTML
   detailMock?: string; // local path to mock detail page HTML
@@ -19,6 +20,7 @@ export interface ScrapedPage {
   type: string;
   url: string;
   html: string;
+  subFolder?: string; // Resolved subfolder for storage (e.g. "annual_progress_report")
 }
 
 export interface IMunicipalityScraper {

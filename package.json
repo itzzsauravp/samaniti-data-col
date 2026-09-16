@@ -18,7 +18,7 @@
     "web:backend:start": "npm --workspace=src/web/backend start",
     "web:frontend:dev": "npm --workspace=src/web/frontend run dev",
     "web:frontend:build": "npm --workspace=src/web/frontend run build",
-    "g0": "psql -h localhost -U sauravp -d postgres -c \"DROP DATABASE samanitidb WITH (FORCE)\" && prisma migrate deploy && rm -rf ./storage"
+    "g0": "echo \"================ Please do not try this at home!!! ================ \" && psql -h localhost -U sauravp -d postgres -c \"DROP DATABASE samanitidb WITH (FORCE)\" && prisma migrate deploy && rm -rf ./storage"
   },
   "keywords": [
     "scraping",

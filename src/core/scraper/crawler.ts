@@ -11,6 +11,7 @@ import {
   extractPaginationUrls,
   getMockPaginatedPages,
 } from "../../scrapers/lumbini/sainamaina-mun/utils/paginate.js";
+import { extractSlugFromUrl } from "../utils/index.js";
 
 const BASE_URL = "https://sainamainamun.gov.np";
 
@@ -48,6 +49,7 @@ export async function crawlRoutes(
       try {
         type ListingPage = { url: string; html: string };
         const listingPages: ListingPage[] = [];
+        const subFolder = route.subFolder || extractSlugFromUrl(route.live);
 
         const firstHtml = await fs.readFile(route.mock, "utf-8");
         listingPages.push({ url: route.live, html: firstHtml });
@@ -57,7 +59,7 @@ export async function crawlRoutes(
           const extraPages = await getMockPaginatedPages(route.mock, base);
           listingPages.push(...extraPages);
           console.log(
-            `[crawlRoutes (mock)] Paginated route '${route.type}': found ${extraPages.length} extra page(s)`,
+            `[crawlRoutes (mock)] Paginated route '${route.type}' (${subFolder}): found ${extraPages.length} extra page(s)`,
           );
         }
 
@@ -82,15 +84,25 @@ export async function crawlRoutes(
           }
 
           console.log(
-            `[crawlRoutes (mock)] Route '${route.type}': queued ${allDetailUrls.size} unique detail page(s)`,
+            `[crawlRoutes (mock)] Route '${route.type}' (${subFolder}): queued ${allDetailUrls.size} unique detail page(s)`,
           );
 
           for (const url of allDetailUrls) {
-            pages.push({ type: detailType, url, html: detailHtml });
+            pages.push({
+              type: detailType,
+              url,
+              html: detailHtml,
+              subFolder,
+            });
           }
         } else {
           for (const { url, html } of listingPages) {
-            pages.push({ type: route.type, url, html });
+            pages.push({
+              type: route.type,
+              url,
+              html,
+              subFolder,
+            });
           }
         }
       } catch (err) {
@@ -119,10 +131,15 @@ export async function crawlRoutes(
     async requestHandler({ request, body, crawler: crawlerInstance }) {
       const route = request.userData.route as RouteConfig | undefined;
       const type = route?.type ?? "page";
+      const subFolder =
+        route?.subFolder ||
+        (route?.live ? extractSlugFromUrl(route.live) : undefined);
+
       pages.push({
         type,
         url: request.loadedUrl ?? request.url,
         html: body.toString(),
+        subFolder,
       });
 
       if (route?.detailSelector) {
