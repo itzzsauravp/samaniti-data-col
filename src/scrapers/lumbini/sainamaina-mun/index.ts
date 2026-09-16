@@ -1,9 +1,14 @@
-import { IMunicipalityScraper, ScrapedPage, ScraperConfig } from '../../../core/contracts/scraper.interface.js';
-import { EtlPayload } from '../../../core/types/domain.js';
-import { extract, ROUTES } from './extract.js';
-import { transform, MUNICIPALITY_CODE } from './transform.js';
-import { load } from './load.js';
-import { prisma } from '../../../core/db/loader.js';
+import "dotenv/config";
+import {
+  IMunicipalityScraper,
+  ScrapedPage,
+  ScraperConfig,
+} from "../../../core/contracts/scraper.interface.js";
+import { EtlPayload } from "../../../core/types/domain.js";
+import { extract, ROUTES } from "./extract.js";
+import { transform, MUNICIPALITY_CODE } from "./transform.js";
+import { load } from "./load.js";
+import { prisma } from "../../../core/db/loader.js";
 
 export class SainamainaScraper implements IMunicipalityScraper {
   public municipalityCode = MUNICIPALITY_CODE;
@@ -13,7 +18,7 @@ export class SainamainaScraper implements IMunicipalityScraper {
     return extract(config);
   }
 
-  transform(pages: ScrapedPage[]): EtlPayload {
+  async transform(pages: ScrapedPage[]): Promise<EtlPayload> {
     return transform(pages);
   }
 
@@ -22,14 +27,23 @@ export class SainamainaScraper implements IMunicipalityScraper {
   }
 
   async run(config: ScraperConfig): Promise<void> {
-    console.log(`[SainamainaScraper] Starting ETL run for '${this.municipalityCode}' (useMocks: ${config.useMocks})`);
+    console.log(
+      `[SainamainaScraper] Starting ETL run for '${this.municipalityCode}' (useMocks: ${config.useMocks})`,
+    );
 
     const pages = await this.extract(config);
-    console.log(`[SainamainaScraper] Extracted ${pages.length} page(s): ${pages.map((p) => p.type).join(', ')}`);
+    console.log(
+      `[SainamainaScraper] Extracted ${pages.length} page(s): ${pages.map((p) => p.type).join(", ")}`,
+    );
 
-    const data = this.transform(pages);
-    const total = (data.projects?.length ?? 0) + (data.reports?.length ?? 0) + (data.notices?.length ?? 0);
-    console.log(`[SainamainaScraper] Transformed → ${total} records (${data.projects?.length ?? 0} projects, ${data.reports?.length ?? 0} reports, ${data.notices?.length ?? 0} notices)`);
+    const data = await this.transform(pages);
+    const total =
+      (data.projects?.length ?? 0) +
+      (data.reports?.length ?? 0) +
+      (data.notices?.length ?? 0);
+    console.log(
+      `[SainamainaScraper] Transformed → ${total} records (${data.projects?.length ?? 0} projects, ${data.reports?.length ?? 0} reports, ${data.notices?.length ?? 0} notices)`,
+    );
 
     await this.load(data);
     console.log(`[SainamainaScraper] ETL run completed successfully.`);
@@ -37,16 +51,16 @@ export class SainamainaScraper implements IMunicipalityScraper {
 }
 
 // Run directly: USE_MOCK=true npm run scraper:sainamaina
-if (process.env.USE_MOCK === 'true' || process.env.RUN_SCRAPER === 'true') {
-  (async () => {
-    const scraper = new SainamainaScraper();
-    try {
-      await scraper.run({ useMocks: process.env.USE_MOCK !== 'false' });
-    } catch (err) {
-      console.error('[SainamainaScraper] Fatal error:', err);
-      process.exit(1);
-    } finally {
-      await prisma.$disconnect();
-    }
-  })();
-}
+(async () => {
+  const scraper = new SainamainaScraper();
+  try {
+    const rawMock = process.env.USE_MOCK?.trim().toLowerCase().replace(/['"]/g, "");
+    const useMocks = rawMock === "true" || rawMock === "1";
+    await scraper.run({ useMocks });
+  } catch (err) {
+    console.error("[SainamainaScraper] Fatal error:", err);
+    process.exit(1);
+  } finally {
+    await prisma.$disconnect();
+  }
+})();

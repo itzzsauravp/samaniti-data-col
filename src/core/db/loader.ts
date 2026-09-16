@@ -12,7 +12,7 @@ import {
 } from "../types/domain.js";
 
 if (!process.env.DATABASE_URL) {
-  throw new Error('[loader] DATABASE_URL environment variable is not set.');
+  throw new Error("[loader] DATABASE_URL environment variable is not set.");
 }
 
 // PrismaPg accepts a connection string, pg.PoolConfig, or pg.Pool directly.
@@ -68,6 +68,18 @@ export async function upsertMunicipalityProfile(
 }
 
 /**
+ * Checks if a record (Project, Report, or Notice) with the given sourceUrl already exists.
+ */
+export async function isRecordExisting(sourceUrl: string): Promise<boolean> {
+  const [project, report, notice] = await Promise.all([
+    prisma.project.findUnique({ where: { sourceUrl }, select: { id: true } }),
+    prisma.report.findUnique({ where: { sourceUrl }, select: { id: true } }),
+    prisma.notice.findUnique({ where: { sourceUrl }, select: { id: true } }),
+  ]);
+  return !!(project || report || notice);
+}
+
+/**
  * Maps input document objects into standard Prisma nested creation queries.
  */
 function buildDocumentNestedQuery(docs?: DocumentData[]) {
@@ -78,6 +90,8 @@ function buildDocumentNestedQuery(docs?: DocumentData[]) {
       fileType: doc.fileType,
       originalUrl: doc.originalUrl,
       storagePath: doc.storagePath,
+      downloadStatus: doc.downloadStatus ?? "pending",
+      downloadError: doc.downloadError ?? null,
     })),
   };
 }
@@ -105,6 +119,7 @@ export async function upsertProject(data: ProjectData): Promise<void> {
       fiscalYear: projectFields.fiscalYear,
       status: projectFields.status,
       wardNo: projectFields.wardNo,
+      type: projectFields.type,
       municipalityId: municipality.id,
     },
     create: {
@@ -134,7 +149,7 @@ export async function upsertReport(data: ReportData): Promise<void> {
     update: {
       titleNe: reportFields.titleNe,
       titleEn: reportFields.titleEn,
-      reportType: reportFields.reportType,
+      type: reportFields.type,
       fiscalYear: reportFields.fiscalYear,
       publishedDate: reportFields.publishedDate,
       municipalityId: municipality.id,
@@ -167,7 +182,7 @@ export async function upsertNotice(data: NoticeData): Promise<void> {
       titleNe: noticeFields.titleNe,
       titleEn: noticeFields.titleEn,
       contentNe: noticeFields.contentNe,
-      noticeType: noticeFields.noticeType,
+      type: noticeFields.type,
       publishedDate: noticeFields.publishedDate,
       municipalityId: municipality.id,
     },

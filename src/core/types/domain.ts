@@ -21,11 +21,18 @@ export interface MunicipalityProfileData {
   totalSchools?: number | null;
 }
 
+/** Possible states for a document download attempt. */
+export type DownloadStatus = "pending" | "ok" | "failed" | "skipped";
+
 export interface DocumentData {
   fileName: string;
   fileType?: string | null;
   originalUrl: string;
   storagePath?: string | null;
+  /** "ok" when file saved, "failed" with downloadError when it errored, "skipped" when SKIP_FILE_DOWNLOADS=true */
+  downloadStatus: DownloadStatus;
+  /** Human-readable error message when downloadStatus is "failed" */
+  downloadError?: string | null;
 }
 
 export interface ProjectData {
@@ -36,6 +43,7 @@ export interface ProjectData {
   fiscalYear?: string | null;
   status?: string | null;
   wardNo?: number | null;
+  type?: string | null;
   sourceUrl: string;
   documents?: DocumentData[];
 }
@@ -44,7 +52,7 @@ export interface ReportData {
   municipalityCode: string;
   titleNe: string;
   titleEn?: string | null;
-  reportType?: string | null;
+  type?: string | null;
   fiscalYear?: string | null;
   publishedDate?: string | null;
   sourceUrl: string;
@@ -56,7 +64,7 @@ export interface NoticeData {
   titleNe: string;
   titleEn?: string | null;
   contentNe?: string | null;
-  noticeType?: string | null;
+  type?: string | null;
   publishedDate?: string | null;
   sourceUrl: string;
   documents?: DocumentData[];

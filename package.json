@@ -4,11 +4,21 @@
   "description": "TypeScript web scraping ETL monorepo for public local government portal data in Nepal",
   "type": "module",
   "main": "dist/index.js",
+  "workspaces": [
+    "src/web/backend",
+    "src/web/frontend"
+  ],
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
+    "build": "tsc && npm --workspace=src/web/frontend run build",
+    "start": "concurrently \"npm run web:backend:dev\" \"npm run web:frontend:dev\"",
     "db:generate": "prisma generate",
-    "scraper:sainamaina": "tsx src/scrapers/lumbini/sainamaina-mun/index.ts"
+    "db:push": "prisma db push",
+    "scraper:sainamaina": "tsx src/scrapers/lumbini/sainamaina-mun/index.ts",
+    "web:backend:dev": "npm --workspace=src/web/backend run dev",
+    "web:backend:start": "npm --workspace=src/web/backend start",
+    "web:frontend:dev": "npm --workspace=src/web/frontend run dev",
+    "web:frontend:build": "npm --workspace=src/web/frontend run build",
+    "g0": "psql -h localhost -U sauravp -d postgres -c \"DROP DATABASE samanitidb WITH (FORCE)\" && prisma migrate deploy && rm -rf ./storage"
   },
   "keywords": [
     "scraping",
@@ -27,11 +37,13 @@
     "crawlee": "^3.8.2",
     "dotenv": "^17.4.2",
     "nepali-date-converter": "^3.4.0",
-    "pg": "^8.23.0"
+    "pg": "^8.23.0",
+    "undici": "^8.10.2"
   },
   "devDependencies": {
     "@types/node": "^20.11.24",
     "@types/pg": "^8.23.1",
+    "concurrently": "^10.0.5",
     "prisma": "^7.10.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.23.13",
