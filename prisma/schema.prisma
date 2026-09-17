@@ -104,7 +104,7 @@ model Document {
   id             String   @id @default(uuid())
   fileName       String   @map("file_name")
   fileType       String?  @map("file_type")
-  originalUrl    String   @map("original_url")
+  originalUrl    String   @unique @map("original_url")
   storagePath    String?  @map("storage_path")
   projectId      String?  @map("project_id")
   reportId       String?  @map("report_id")

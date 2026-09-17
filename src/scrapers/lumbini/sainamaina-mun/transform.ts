@@ -1,27 +1,27 @@
 import * as cheerio from "cheerio";
 import {
-  DocumentData,
-  EtlPayload,
-  MunicipalityData,
-  ProjectData,
-  ReportData,
-  NoticeData,
+    DocumentData,
+    EtlPayload,
+    MunicipalityData,
+    ProjectData,
+    ReportData,
+    NoticeData,
 } from "../../../core/types/domain.js";
 import { ScrapedPage } from "../../../core/contracts/scraper.interface.js";
 import {
-  extractSlugFromUrl,
-  parseNepaliFiscalYear,
+    parseNepaliFiscalYear,
+    extractTitle,
+    extractDocumentLinks,
 } from "../../../core/utils/index.js";
-import { isRecordExisting } from "../../../core/db/loader.js";
 
 export const MUNICIPALITY_CODE = "SAINAMAINA";
 
 export const MUNICIPALITY_METADATA: MunicipalityData = {
-  code: MUNICIPALITY_CODE,
-  nameNe: "सैनामैना नगरपालिका",
-  nameEn: "Sainamaina Municipality",
-  province: "Lumbini",
-  district: "Rupandehi",
+    code: MUNICIPALITY_CODE,
+    nameNe: "सैनामैना नगरपालिका",
+    nameEn: "Sainamaina Municipality",
+    province: "Lumbini",
+    district: "Rupandehi",
 };
 
 // ---------------------------------------------------------------------------
@@ -29,403 +29,316 @@ export const MUNICIPALITY_METADATA: MunicipalityData = {
 // ---------------------------------------------------------------------------
 
 export async function buildDocument(
-  fileUrl: string,
-  titleNe: string,
-  publishedDate: string | null,
+    fileUrl: string,
+    _titleNe?: string,
+    _publishedDate?: string | null,
 ): Promise<DocumentData> {
-  const base = "https://sainamainamun.gov.np";
-  const absoluteUrl = fileUrl.startsWith("http")
-    ? fileUrl
-    : `${base}${fileUrl}`;
-  const rawFileName =
-    absoluteUrl.split("/").pop()?.split("?")[0] || "attachment.pdf";
-  const fileName = decodeURIComponent(rawFileName);
+    const base = "https://sainamainamun.gov.np";
+    const absoluteUrl = fileUrl.startsWith("http") ? fileUrl : `${base}${fileUrl}`;
+    const rawFileName = absoluteUrl.split("/").pop()?.split("?")[0] || "attachment.pdf";
+    const fileName = decodeURIComponent(rawFileName);
 
-  return {
-    fileName,
-    fileType: absoluteUrl.endsWith(".pdf") ? "application/pdf" : null,
-    originalUrl: absoluteUrl,
-    storagePath: null,
-    downloadStatus: "pending",
-    downloadError: null,
-  };
+    return {
+        fileName,
+        fileType: absoluteUrl.endsWith(".pdf") ? "application/pdf" : null,
+        originalUrl: absoluteUrl,
+        storagePath: null,
+        downloadStatus: "pending",
+        downloadError: null,
+    };
 }
 
 // ---------------------------------------------------------------------------
-// 1. Projects Transformers
+// Shared transformers for listing rows
 // ---------------------------------------------------------------------------
 
 /**
- * Transforms an individual project detail page visited by the crawler.
+ * Transforms a single row from a listing page into a Project record.
  */
-async function transformProjectDetail(
-  page: ScrapedPage,
-): Promise<Partial<EtlPayload>> {
-  const $ = cheerio.load(page.html);
-  const baseUrl = new URL(page.url).origin;
-
-  const titleNe =
-    $('span[property="dc:title"]').attr("content")?.trim() ||
-    $(".section-title").text().trim() ||
-    $("h1").text().trim() ||
-    "";
-
-  const documents: DocumentData[] = [];
-
-  const docElements = $(
-    ".field-name-field-supporting-documents a, .field-type-file a, .file a, a[href$='.pdf'], a[href*='.pdf']",
-  ).toArray();
-
-  const hrefs = docElements
-    .map((el) => $(el).attr("href"))
-    .filter(
-      (href): href is string =>
-        Boolean(href) && !(href as string).startsWith("data:"),
-    );
-
-  console.log("These are extracted hrefs:", hrefs);
-  console.log("These are doc elements:", docElements);
-
-  for (const el of docElements) {
-    const rawFileUrl = $(el).attr("href");
-    if (!rawFileUrl || rawFileUrl.startsWith("data:")) continue;
-    const fileUrl = rawFileUrl.startsWith("http")
-      ? rawFileUrl
-      : `${baseUrl}${rawFileUrl}`;
-    documents.push(await buildDocument(fileUrl, titleNe, null));
-  }
-
-  const project: ProjectData = {
-    municipalityCode: MUNICIPALITY_CODE,
-    titleNe,
-    titleEn: null,
-    budgetAmount: null,
-    fiscalYear: parseNepaliFiscalYear(titleNe) || null,
-    status: "",
-    wardNo: null,
-    sourceUrl: decodeURIComponent(page.url),
-    documents,
-    type: page.category,
-  };
-
-  console.log(
-    `[Project Detail] "${project.titleNe}" | docs: ${documents.length} | url: ${project.sourceUrl}`,
-  );
-  return { projects: [project] };
-}
-
-/**
- * Transforms a table/listing page where items already contain their documents directly.
- */
-async function transformProjectListing(
-  page: ScrapedPage,
-): Promise<Partial<EtlPayload>> {
-  const $ = cheerio.load(page.html);
-  const baseUrl = new URL(page.url).origin;
-
-  const projects: ProjectData[] = [];
-  const rows = $(".views-row").toArray();
-  console.log(`[Project Listing] ${rows.length} row(s) found on ${page.url}`);
-
-  let index = 0;
-  for (const el of rows) {
-    const $item = $(el);
-    const $titleLink = $item.find("h2 a, .views-field-title a").first();
+async function transformProjectRow(
+    $: cheerio.CheerioAPI,
+    row: cheerio.Cheerio<any>,
+    baseUrl: string,
+    category: string,
+): Promise<ProjectData> {
+    const $titleLink = row.find("h2 a, .views-field-title a").first();
     const titleNe = $titleLink.text().trim().replace(/\s+/g, " ") || "";
-
     const rawHref = $titleLink.attr("href") || "";
     const sourceUrl = rawHref
-      ? rawHref.startsWith("http")
-        ? rawHref
-        : `${baseUrl}${rawHref}`
-      : page.url;
+        ? rawHref.startsWith("http")
+            ? rawHref
+            : `${baseUrl}${rawHref}`
+        : "";
 
-    try {
-      if (await isRecordExisting(sourceUrl)) {
-        console.log(`  [Delta Skip] exists: ${sourceUrl}`);
-        index++;
-        continue;
-      }
-    } catch {
-      // DB check offline, proceed
-    }
-
-    // Collect file attachments present directly in the listing row
-    const docElements = $item.find(".file a, a[href$='.pdf']").toArray();
+    // Collect file attachments in the row
+    const docElements = row.find(".file a, a[href$='.pdf']").toArray();
     const documents: DocumentData[] = [];
     for (const docEl of docElements) {
-      const rawFileUrl = $(docEl).attr("href");
-      if (!rawFileUrl || rawFileUrl.startsWith("data:")) continue;
-      const fileUrl = rawFileUrl.startsWith("http")
-        ? rawFileUrl
-        : `${baseUrl}${rawFileUrl}`;
-      documents.push(await buildDocument(fileUrl, titleNe, null));
+        const rawFileUrl = $(docEl).attr("href");
+        if (!rawFileUrl || rawFileUrl.startsWith("data:")) continue;
+        const fileUrl = rawFileUrl.startsWith("http") ? rawFileUrl : `${baseUrl}${rawFileUrl}`;
+        documents.push(await buildDocument(fileUrl, titleNe, null));
     }
 
-    // If the title link itself is a direct document
-    if (
-      documents.length === 0 &&
-      (sourceUrl.endsWith(".pdf") || sourceUrl.includes(".pdf"))
-    ) {
-      documents.push(await buildDocument(sourceUrl, titleNe, null));
+    // If the link itself is a PDF
+    if (documents.length === 0 && sourceUrl.endsWith(".pdf")) {
+        documents.push(await buildDocument(sourceUrl, titleNe, null));
     }
 
-    const project: ProjectData = {
-      municipalityCode: MUNICIPALITY_CODE,
-      titleNe,
-      titleEn: null,
-      budgetAmount: null,
-      fiscalYear: parseNepaliFiscalYear(titleNe) || null,
-      status: "",
-      wardNo: null,
-      type: page.category,
-      sourceUrl: decodeURIComponent(sourceUrl),
-      documents,
-    };
-
-    projects.push(project);
-    index++;
-  }
-
-  return { projects };
-}
-
-async function transformProject(
-  page: ScrapedPage,
-): Promise<Partial<EtlPayload>> {
-  if (page.routeType === "projectDetail") {
-    return transformProjectDetail(page);
-  }
-  const $ = cheerio.load(page.html);
-  if (
-    $('span[property="dc:title"]').length ||
-    $(".node-article").length ||
-    !$(".views-row").length
-  ) {
-    return transformProjectDetail(page);
-  }
-  return transformProjectListing(page);
-}
-
-// ---------------------------------------------------------------------------
-// 2. Reports Transformer
-// ---------------------------------------------------------------------------
-
-async function transformReports(
-  page: ScrapedPage,
-): Promise<Partial<EtlPayload>> {
-  const $ = cheerio.load(page.html);
-  const baseUrl = new URL(page.url).origin;
-  const reports: ReportData[] = [];
-
-  const rows = $(".views-row").toArray();
-
-  if (rows.length > 0) {
-    let index = 0;
-    for (const el of rows) {
-      const $item = $(el);
-
-      const $titleLink = $item.find(".views-field-title a");
-      const titleNe = $titleLink.text().trim() || "";
-      const rawSourceUrl = $titleLink.attr("href") || page.url;
-      const publishedDate =
-        $item.find(".views-field-created .field-content").text().trim() || null;
-
-      const rawFileUrl =
-        $item.find(".views-field-field-documents a").attr("href") || null;
-
-      const sourceUrl = rawSourceUrl.startsWith("http")
-        ? rawSourceUrl
-        : `${baseUrl}${rawSourceUrl}`;
-
-      try {
-        if (await isRecordExisting(sourceUrl)) {
-          console.log(`  [Delta Skip] Report exists: ${sourceUrl}`);
-          index++;
-          continue;
-        }
-      } catch {
-        // proceed
-      }
-
-      const documents: DocumentData[] = [];
-      if (rawFileUrl) {
-        documents.push(await buildDocument(rawFileUrl, titleNe, publishedDate));
-      }
-
-      reports.push({
+    return {
         municipalityCode: MUNICIPALITY_CODE,
         titleNe,
         titleEn: null,
-        type: "",
+        budgetAmount: null,
         fiscalYear: parseNepaliFiscalYear(titleNe) || null,
-        publishedDate,
-        sourceUrl,
+        status: "",
+        wardNo: null,
+        type: category,
+        sourceUrl: decodeURIComponent(sourceUrl),
         documents,
-      });
-      index++;
-    }
-  } else {
-    // Detail page fallback
-    const titleNe =
-      $('span[property="dc:title"]').attr("content")?.trim() ||
-      $("h3.section-title").text().trim() ||
-      $("h1").text().trim() ||
-      "";
-
-    const documents: DocumentData[] = [];
-    for (const el of $(
-      ".field-name-field-supporting-documents a, .field-type-file a, .file a, a[href$='.pdf']",
-    ).toArray()) {
-      const rawFileUrl = $(el).attr("href");
-      if (!rawFileUrl || rawFileUrl.startsWith("data:")) continue;
-      const fileUrl = rawFileUrl.startsWith("http")
-        ? rawFileUrl
-        : `${baseUrl}${rawFileUrl}`;
-      documents.push(await buildDocument(fileUrl, titleNe, null));
-    }
-
-    reports.push({
-      municipalityCode: MUNICIPALITY_CODE,
-      titleNe,
-      titleEn: null,
-      type: "",
-      fiscalYear: parseNepaliFiscalYear(titleNe) || null,
-      publishedDate: null,
-      sourceUrl: decodeURIComponent(page.url),
-      documents,
-    });
-  }
-
-  return { reports };
+    };
 }
 
-// ---------------------------------------------------------------------------
-// 3. Notices Transformer
-// ---------------------------------------------------------------------------
+/**
+ * Transforms a single row from a listing page into a Report record.
+ */
+async function transformReportRow(
+    $: cheerio.CheerioAPI,
+    row: cheerio.Cheerio,
+    baseUrl: string,
+    category: string,
+): Promise<ReportData> {
+    const $titleLink = row.find(".views-field-title a");
+    const titleNe = $titleLink.text().trim() || "";
+    const rawSourceUrl = $titleLink.attr("href") || "";
+    const publishedDate = row.find(".views-field-created .field-content").text().trim() || null;
 
-async function transformNotice(
-  page: ScrapedPage,
-): Promise<Partial<EtlPayload>> {
-  const $ = cheerio.load(page.html);
-  const baseUrl = new URL(page.url).origin;
-  const notices: NoticeData[] = [];
-  const rows = $(".views-row").toArray();
+    const rawFileUrl = row.find(".views-field-field-documents a").attr("href") || null;
 
-  if (rows.length > 0) {
-    for (const el of rows) {
-      const $item = $(el);
-      const $titleLink = $item.find(".views-field-title a");
-      const titleNe = $titleLink.text().trim() || "";
-      const rawSourceUrl = $titleLink.attr("href") || page.url;
-      const sourceUrl = rawSourceUrl.startsWith("http")
-        ? rawSourceUrl
-        : `${baseUrl}${rawSourceUrl}`;
+    const sourceUrl = rawSourceUrl.startsWith("http") ? rawSourceUrl : `${baseUrl}${rawSourceUrl}`;
 
-      try {
-        if (await isRecordExisting(sourceUrl)) {
-          console.log(`  [Delta Skip] Notice exists: ${sourceUrl}`);
-          continue;
-        }
-      } catch {
-        // proceed
-      }
+    const documents: DocumentData[] = [];
+    if (rawFileUrl) {
+        documents.push(await buildDocument(rawFileUrl, titleNe, publishedDate));
+    }
 
-      notices.push({
+    return {
+        municipalityCode: MUNICIPALITY_CODE,
+        titleNe,
+        titleEn: null,
+        type: category,
+        fiscalYear: parseNepaliFiscalYear(titleNe) || null,
+        publishedDate,
+        sourceUrl: decodeURIComponent(sourceUrl),
+        documents,
+    };
+}
+
+/**
+ * Transforms a single row from a listing page into a Notice record.
+ */
+async function transformNoticeRow(
+    $: cheerio.CheerioAPI,
+    row: cheerio.Cheerio,
+    baseUrl: string,
+    category: string,
+): Promise<NoticeData> {
+    const $titleLink = row.find(".views-field-title a");
+    const titleNe = $titleLink.text().trim() || "";
+    const rawSourceUrl = $titleLink.attr("href") || "";
+
+    const sourceUrl = rawSourceUrl.startsWith("http") ? rawSourceUrl : `${baseUrl}${rawSourceUrl}`;
+
+    return {
         municipalityCode: MUNICIPALITY_CODE,
         titleNe,
         titleEn: null,
         contentNe: null,
-        type: "",
+        type: category,
         publishedDate: null,
         sourceUrl: decodeURIComponent(sourceUrl),
         documents: [],
-      });
-    }
-  } else {
-    // Detail notice
-    const titleNe =
-      $('span[property="dc:title"]').attr("content")?.trim() ||
-      $("h3.section-title").text().trim() ||
-      $("h1").text().trim() ||
-      "";
-
-    const documents: DocumentData[] = [];
-    for (const el of $(
-      ".field-name-field-supporting-documents a, .field-type-file a, .file a, a[href$='.pdf']",
-    ).toArray()) {
-      const rawFileUrl = $(el).attr("href");
-      if (!rawFileUrl || rawFileUrl.startsWith("data:")) continue;
-      const fileUrl = rawFileUrl.startsWith("http")
-        ? rawFileUrl
-        : `${baseUrl}${rawFileUrl}`;
-      documents.push(await buildDocument(fileUrl, titleNe, null));
-    }
-
-    notices.push({
-      municipalityCode: MUNICIPALITY_CODE,
-      titleNe,
-      titleEn: null,
-      contentNe: $(".node-content, .content").text().trim() || null,
-      type: "",
-      publishedDate: null,
-      sourceUrl: decodeURIComponent(page.url),
-      documents,
-    });
-  }
-
-  return { notices };
+    };
 }
 
 // ---------------------------------------------------------------------------
-// Transformer registry
+// Detail page transformers
 // ---------------------------------------------------------------------------
 
-const TRANSFORMERS: Record<
-  string,
-  (page: ScrapedPage) => Promise<Partial<EtlPayload>>
-> = {
-  report: transformReports,
-  reportDetail: transformReports,
-  reportdetail: transformReports,
-  project: transformProject,
-  projectDetail: transformProjectDetail,
-  projectdetail: transformProjectDetail,
-  budgetProgramDetail: transformProjectDetail,
-  planProjectDetail: transformProjectDetail,
-  notice: transformNotice,
-  noticeDetail: transformNotice,
-  noticedetail: transformNotice,
+/**
+ * Transforms a project detail page.
+ */
+async function transformProjectDetail(page: ScrapedPage): Promise<Partial<EtlPayload>> {
+    const $ = cheerio.load(page.html);
+    const baseUrl = new URL(page.url).origin;
+
+    const titleNe = extractTitle($);
+    const documents = await Promise.all(
+        extractDocumentLinks($, baseUrl).map((url) => buildDocument(url, titleNe, null)),
+    );
+
+    console.log(`[Project Detail] "${titleNe}" | docs: ${documents.length} | url: ${page.url}`);
+
+    return {
+        projects: [
+            {
+                municipalityCode: MUNICIPALITY_CODE,
+                titleNe,
+                titleEn: null,
+                budgetAmount: null,
+                fiscalYear: parseNepaliFiscalYear(titleNe) || null,
+                status: "",
+                wardNo: null,
+                sourceUrl: decodeURIComponent(page.url),
+                documents,
+                type: page.category,
+            },
+        ],
+    };
+}
+
+/**
+ * Transforms a report detail page.
+ */
+async function transformReportDetail(page: ScrapedPage): Promise<Partial<EtlPayload>> {
+    const $ = cheerio.load(page.html);
+    const baseUrl = new URL(page.url).origin;
+
+    const titleNe = extractTitle($);
+    const documents = await Promise.all(
+        extractDocumentLinks($, baseUrl).map((url) => buildDocument(url, titleNe, null)),
+    );
+
+    return {
+        reports: [
+            {
+                municipalityCode: MUNICIPALITY_CODE,
+                titleNe,
+                titleEn: null,
+                type: page.category,
+                fiscalYear: parseNepaliFiscalYear(titleNe) || null,
+                publishedDate: null,
+                sourceUrl: decodeURIComponent(page.url),
+                documents,
+            },
+        ],
+    };
+}
+
+/**
+ * Transforms a notice detail page.
+ */
+async function transformNoticeDetail(page: ScrapedPage): Promise<Partial<EtlPayload>> {
+    const $ = cheerio.load(page.html);
+    const titleNe = extractTitle($);
+    const documents = await Promise.all(
+        extractDocumentLinks($, new URL(page.url).origin).map((url) =>
+            buildDocument(url, titleNe, null),
+        ),
+    );
+
+    return {
+        notices: [
+            {
+                municipalityCode: MUNICIPALITY_CODE,
+                titleNe,
+                titleEn: null,
+                contentNe: $(".node-content, .content").text().trim() || null,
+                type: page.category,
+                publishedDate: null,
+                sourceUrl: decodeURIComponent(page.url),
+                documents,
+            },
+        ],
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Listing page transformers
+// ---------------------------------------------------------------------------
+
+async function transformProjectListing(page: ScrapedPage): Promise<Partial<EtlPayload>> {
+    const $ = cheerio.load(page.html);
+    const baseUrl = new URL(page.url).origin;
+    const rows = $(".views-row").toArray();
+
+    console.log(`[Project Listing] ${rows.length} row(s) found on ${page.url}`);
+
+    const projects = await Promise.all(
+        rows.map((row) => transformProjectRow($, $(row), baseUrl, page.category || "")),
+    );
+
+    return { projects };
+}
+
+async function transformReportListing(page: ScrapedPage): Promise<Partial<EtlPayload>> {
+    const $ = cheerio.load(page.html);
+    const baseUrl = new URL(page.url).origin;
+    const rows = $(".views-row").toArray();
+
+    const reports = await Promise.all(
+        rows.map((row) => transformReportRow($, $(row), baseUrl, page.category || "")),
+    );
+
+    return { reports };
+}
+
+async function transformNoticeListing(page: ScrapedPage): Promise<Partial<EtlPayload>> {
+    const $ = cheerio.load(page.html);
+    const baseUrl = new URL(page.url).origin;
+    const rows = $(".views-row").toArray();
+
+    const notices = await Promise.all(
+        rows.map((row) => transformNoticeRow($, $(row), baseUrl, page.category || "")),
+    );
+
+    return { notices };
+}
+
+// ---------------------------------------------------------------------------
+// Main transform function - routes to correct handler based on routeType
+// ---------------------------------------------------------------------------
+
+const TRANSFORMERS: Record<string, (page: ScrapedPage) => Promise<Partial<EtlPayload>>> = {
+    // Reports
+    report: transformReportListing,
+    reportDetail: transformReportDetail,
+
+    // Projects
+    project: transformProjectListing,
+    projectDetail: transformProjectDetail,
+
+    // Notices
+    notice: transformNoticeListing,
+    noticeDetail: transformNoticeDetail,
 };
 
-// ---------------------------------------------------------------------------
-// Main transform entry point
-// ---------------------------------------------------------------------------
 export async function transform(pages: ScrapedPage[]): Promise<EtlPayload> {
-  let merged: Partial<EtlPayload> = {};
+    let merged: Partial<EtlPayload> = {};
 
-  for (const page of pages) {
-    const key = page.routeType;
-    const handler = TRANSFORMERS[key] ?? TRANSFORMERS[key?.toLowerCase()];
-    if (!handler) {
-      console.warn(
-        `[transform] No handler for routeType "${page.routeType}". Skipping ${page.url}`,
-      );
-      continue;
+    for (const page of pages) {
+        const key = page.routeType;
+        const handler = TRANSFORMERS[key] ?? TRANSFORMERS[key?.toLowerCase()];
+        if (!handler) {
+            console.warn(
+                `[transform] No handler for routeType "${page.routeType}". Skipping ${page.url}`,
+            );
+            continue;
+        }
+
+        const partial = await handler(page);
+
+        merged = {
+            ...merged,
+            ...partial,
+            projects: [...(merged.projects ?? []), ...(partial.projects ?? [])],
+            reports: [...(merged.reports ?? []), ...(partial.reports ?? [])],
+            notices: [...(merged.notices ?? []), ...(partial.notices ?? [])],
+        };
     }
-    const partial = await handler(page);
 
-    merged = {
-      ...merged,
-      ...partial,
-      projects: [...(merged.projects ?? []), ...(partial.projects ?? [])],
-      reports: [...(merged.reports ?? []), ...(partial.reports ?? [])],
-      notices: [...(merged.notices ?? []), ...(partial.notices ?? [])],
+    return {
+        municipality: MUNICIPALITY_METADATA,
+        ...merged,
     };
-  }
-
-  return {
-    municipality: MUNICIPALITY_METADATA,
-    ...merged,
-  };
 }
