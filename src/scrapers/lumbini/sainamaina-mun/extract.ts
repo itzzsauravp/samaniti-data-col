@@ -1,5 +1,3 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   RouteConfig,
   ScrapedPage,
@@ -7,137 +5,52 @@ import {
 } from "../../../core/contracts/scraper.interface.js";
 import { crawlRoutes } from "../../../core/scraper/crawler.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 export const BASE_URL = "https://sainamainamun.gov.np";
 
 /**
  * Route definitions for Sainamaina Municipality portal.
- * Add or modify entries here when the portal gets new sections or URLs change.
  *
- * - type: entity group ("report", "project", "notice")
- * - subFolder: optional storage subfolder. If omitted, automatically derived from URL slug!
+ * - type: entity group used to dispatch the correct transformer ("report", "project", "notice")
+ * - contentSelector: CSS selector for listing pages (e.g. ".view-content")
+ * - detailSelector: CSS selector for item links on listing page (e.g. ".views-field-title a").
+ *     When provided, crawler enqueues and visits each detail link.
+ * - detailContentSelector: CSS selector to scope the HTML on the detail page (e.g. ".node-article, .node-full").
+ * - detailType: custom routeType passed to ScrapedPage for transformer dispatch ("projectDetail").
+ * - paginated: true enables discovering and crawling all listing pages (Page 1 -> Page N)
  */
 export const ROUTES: RouteConfig[] = [
   // {
-  //   type: "report",
-  //   live: `${BASE_URL}/en/annual-progress-report`,
-  //   mock: path.resolve(__dirname, "mock-pages/annual-progress-report.html"),
-  // },
-  // {
-  //   type: "report",
-  //   live: `${BASE_URL}/en/trimester-progress-report`,
-  //   mock: path.resolve(__dirname, "mock-pages/annual-progress-report.html"), // reusing for now
-  // },
-  // {
-  //   type: "report",
-  //   live: `${BASE_URL}/en/audit-report`,
-  //   mock: path.resolve(__dirname, "mock-pages/annual-progress-report.html"), // reusing for now
-  // },
-  // {
-  //   type: "report",
-  //   live: `${BASE_URL}/en/monitoring-report`,
-  //   mock: path.resolve(__dirname, "mock-pages/annual-progress-report.html"), // reusing for now
-  // },
-  // {
-  //   type: "report",
-  //   live: `${BASE_URL}/en/public-hearing`,
-  //   mock: path.resolve(__dirname, "mock-pages/annual-progress-report.html"), // reusing for now
-  // },
-  // {
-  //   type: "report",
-  //   live: `${BASE_URL}/en/public-audit`,
-  //   mock: path.resolve(__dirname, "mock-pages/annual-progress-report.html"), // reusing for now
-  // },
-  // {
-  //   type: "report",
-  //   live: `${BASE_URL}/en/social-audit`,
-  //   mock: path.resolve(__dirname, "mock-pages/annual-progress-report.html"), // reusing for now
-  // },
-  // {
-  //   type: "report",
-  //   live: `${BASE_URL}/en/publications`,
-  //   mock: path.resolve(__dirname, "mock-pages/publications.html"),
+  //   type: "project",
+  //   live: `${BASE_URL}/ne/budget-program`,
+  //   baseUrl: BASE_URL,
+  //   paginated: true,
+  //   contentSelector: ".container",
+  //   detailSelector: "h2 a",
+  //   detailContentSelector: ".container",
+  //   detailType: "projectDetail",
   // },
   // {
   //   type: "project",
-  //   live: `${BASE_URL}/en/budget-program`,
-  //   mock: path.resolve(__dirname, "mock-pages/budget-program.html"),
-  //   detailMock: path.resolve(
-  //     __dirname,
-  //     "mock-pages/budget-program-detail.html",
-  //   ),
-  //   detailSelector: "li.node-readmore a",
-  //   detailType: "budgetProgramDetail",
-  //   paginated: true,
+  //   live: `${BASE_URL}/ne/budget-program`,
   //   baseUrl: BASE_URL,
-  // },
-  // {
-  //   type: "project",
-  //   live: `${BASE_URL}/en/plan-project`,
-  //   mock: path.resolve(__dirname, "mock-pages/budget-program.html"), // reusing
-  //   detailMock: path.resolve(
-  //     __dirname,
-  //     "mock-pages/budget-program-detail.html",
-  //   ), // reusing
-  //   detailSelector: "li.node-readmore a",
-  //   detailType: "planProjectDetail",
   //   paginated: true,
-  //   baseUrl: BASE_URL,
+  //   contentSelector: ".region-content, .container",
+  //   detailSelector: ".region-content h2 a",
+  //   detailContentSelector: ".container",
+  //   detailType: "projectDetail",
   // },
   {
-    type: "notice",
-    live: `${BASE_URL}/en/news-notice`,
-    mock: path.resolve(__dirname, "mock-pages/news-notice.html"),
-    detailMock: path.resolve(__dirname, "mock-pages/new-notice-detail.html"),
-    detailSelector: "li.node-readmore a",
-    detailType: "noticeDetail",
-    paginated: true,
+    type: "report",
+    live: `${BASE_URL}/ne/annual-progress-report`,
     baseUrl: BASE_URL,
+    paginated: true,
+    contentSelector: ".introduction, .container",
+    detailSelector: ".region-content span.field-content a",
+    detailContentSelector: ".container",
+    detailType: "projectDetail",
   },
-  // {
-  //   type: "notice",
-  //   live: `${BASE_URL}/en/public-procurement-tender-notices`,
-  //   mock: path.resolve(__dirname, "mock-pages/news-notice.html"), // reusing
-  //   detailMock: "",
-  //   detailSelector: "li.node-readmore a",
-  //   detailType: "noticeDetail",
-  //   paginated: true,
-  //   baseUrl: BASE_URL,
-  // },
-  // {
-  //   type: "notice",
-  //   live: `${BASE_URL}/en/act-law-directives`,
-  //   mock: path.resolve(__dirname, "mock-pages/act-law-directives.html"),
-  //   detailMock: path.resolve(__dirname, "mock-pages/decisions-details.html"), // reusing
-  //   detailSelector: "li.node-readmore a",
-  //   detailType: "noticeDetail",
-  //   paginated: true,
-  //   baseUrl: BASE_URL,
-  // },
-  // {
-  //   type: "notice",
-  //   live: `${BASE_URL}/en/tax-and-fees`,
-  //   mock: path.resolve(__dirname, "mock-pages/tax-fees.html"),
-  //   detailMock: "",
-  //   detailSelector: "li.node-readmore a",
-  //   detailType: "noticeDetail",
-  //   paginated: true,
-  //   baseUrl: BASE_URL,
-  // },
-  // {
-  //   type: "notice",
-  //   live: `${BASE_URL}/en/decisions`,
-  //   mock: path.resolve(__dirname, "mock-pages/decisions.html"),
-  //   detailMock: path.resolve(__dirname, "mock-pages/decisions-details.html"),
-  //   detailSelector: "li.node-readmore a",
-  //   detailType: "noticeDetail",
-  //   paginated: true,
-  //   baseUrl: BASE_URL,
-  // },
 ];
 
-export async function extract(config: ScraperConfig): Promise<ScrapedPage[]> {
+export async function extract(config?: ScraperConfig): Promise<ScrapedPage[]> {
   return crawlRoutes(ROUTES, config);
 }

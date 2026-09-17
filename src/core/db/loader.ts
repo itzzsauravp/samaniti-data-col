@@ -82,6 +82,7 @@ export async function isRecordExisting(sourceUrl: string): Promise<boolean> {
 /**
  * Maps input document objects into standard Prisma nested creation queries.
  */
+// TODO: Check the db for existing docs and then only create a new one
 function buildDocumentNestedQuery(docs?: DocumentData[]) {
   if (!docs || docs.length === 0) return undefined;
   return {
@@ -152,6 +153,7 @@ export async function upsertReport(data: ReportData): Promise<void> {
       type: reportFields.type,
       fiscalYear: reportFields.fiscalYear,
       publishedDate: reportFields.publishedDate,
+      metadata: reportFields.metadata,
       municipalityId: municipality.id,
     },
     create: {
@@ -184,6 +186,7 @@ export async function upsertNotice(data: NoticeData): Promise<void> {
       contentNe: noticeFields.contentNe,
       type: noticeFields.type,
       publishedDate: noticeFields.publishedDate,
+      metadata: noticeFields.metadata,
       municipalityId: municipality.id,
     },
     create: {

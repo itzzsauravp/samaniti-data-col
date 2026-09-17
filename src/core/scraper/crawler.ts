@@ -1,166 +1,196 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import { load as cheerioLoad } from "cheerio";
-import { CheerioCrawler } from "crawlee";
+import { CheerioCrawler, RequestQueue } from "crawlee";
 import {
   RouteConfig,
   ScrapedPage,
   ScraperConfig,
 } from "../contracts/scraper.interface.js";
-import {
-  extractPaginationUrls,
-  getMockPaginatedPages,
-} from "../../scrapers/lumbini/sainamaina-mun/utils/paginate.js";
-import { extractSlugFromUrl } from "../utils/index.js";
-
-const BASE_URL = "https://sainamainamun.gov.np";
+import { extractPaginationUrls } from "../../scrapers/lumbini/sainamaina-mun/utils/paginate.js";
+import { isRecordExisting } from "../db/loader.js";
+import { extractSlugFromUrl } from "../utils/url.js";
 
 /**
- * Extracts all detail-page hrefs from a listing page HTML string.
+ * Scopes a full page HTML string down to the inner HTML of the first element
+ * matching `selector`. If the selector matches nothing, returns the full body HTML.
  */
-function extractDetailLinksFromHtml(html: string, selector: string): string[] {
+function scopeHtml(fullHtml: string, selector: string): string {
+  const $ = cheerioLoad(fullHtml);
+  const el = $(selector);
+  if (!el.length) {
+    console.warn(
+      `[scopeHtml] Selector "${selector}" matched nothing — falling back to full body.`,
+    );
+    return $("body").length ? $.html($("body")) : fullHtml;
+  }
+  return $.html(el) ?? fullHtml;
+}
+
+/**
+ * Extracts all absolute detail-page hrefs from a full listing page HTML string.
+ */
+function extractDetailLinksFromHtml(
+  html: string,
+  selector: string,
+  baseUrl: string,
+): string[] {
   const $ = cheerioLoad(html);
   const links: string[] = [];
   $(selector).each((_, el) => {
     const href = $(el).attr("href");
     if (!href) return;
-    const absolute = href.startsWith("http") ? href : `${BASE_URL}${href}`;
+    const absolute = href.startsWith("http") ? href : `${baseUrl}${href}`;
     links.push(absolute);
   });
   return links;
 }
 
 /**
- * Generic crawler that extracts pages from a configured list of routes.
- * Supports both local mock files and live HTTP crawling via Crawlee.
- * Handles paginated listing pages and detail-page queueing.
+ * Generic sequential crawler built on Crawlee's CheerioCrawler.
+ *
+ * For each route:
+ *   1. Fetches Page 1 (the root listing page).
+ *   2. If `contentSelector` is set, scopes the HTML to that element before
+ *      passing it to transform — transform only ever sees relevant markup.
+ *   3. If `detailSelector` is set, queues detail-page links instead of pushing
+ *      the listing page itself. The detail pages are then scoped + pushed.
+ *   4. If `paginated` is true, discovers all subsequent page URLs and processes
+ *      each one through the same scoping/detail logic.
  */
 export async function crawlRoutes(
   routes: RouteConfig[],
-  config: ScraperConfig,
+  config?: ScraperConfig,
 ): Promise<ScrapedPage[]> {
-  // -------------------------------------------------------------------
-  // MOCK MODE
-  // -------------------------------------------------------------------
-  if (config.useMocks) {
-    const pages: ScrapedPage[] = [];
-
-    for (const route of routes) {
-      try {
-        type ListingPage = { url: string; html: string };
-        const listingPages: ListingPage[] = [];
-        const subFolder = route.subFolder || extractSlugFromUrl(route.live);
-
-        const firstHtml = await fs.readFile(route.mock, "utf-8");
-        listingPages.push({ url: route.live, html: firstHtml });
-
-        if (route.paginated) {
-          const base = route.baseUrl ?? BASE_URL;
-          const extraPages = await getMockPaginatedPages(route.mock, base);
-          listingPages.push(...extraPages);
-          console.log(
-            `[crawlRoutes (mock)] Paginated route '${route.type}' (${subFolder}): found ${extraPages.length} extra page(s)`,
-          );
-        }
-
-        if (route.detailSelector && route.detailMock !== undefined) {
-          const detailMockPath =
-            route.detailMock !== ""
-              ? route.detailMock
-              : path.resolve(
-                  path.dirname(route.mock),
-                  "budget-program-detail.html",
-                );
-          const detailHtml = await fs.readFile(detailMockPath, "utf-8");
-          const detailType = route.detailType ?? `${route.type}Detail`;
-          const allDetailUrls = new Set<string>();
-
-          for (const { html } of listingPages) {
-            const links = extractDetailLinksFromHtml(
-              html,
-              route.detailSelector,
-            );
-            links.forEach((l) => allDetailUrls.add(l));
-          }
-
-          console.log(
-            `[crawlRoutes (mock)] Route '${route.type}' (${subFolder}): queued ${allDetailUrls.size} unique detail page(s)`,
-          );
-
-          for (const url of allDetailUrls) {
-            pages.push({
-              type: detailType,
-              url,
-              html: detailHtml,
-              subFolder,
-            });
-          }
-        } else {
-          for (const { url, html } of listingPages) {
-            pages.push({
-              type: route.type,
-              url,
-              html,
-              subFolder,
-            });
-          }
-        }
-      } catch (err) {
-        console.warn(
-          `[crawlRoutes] Could not process mock for route '${route.type}' at: ${route.mock}`,
-          err,
-        );
-      }
-    }
-
-    return pages;
-  }
-
-  // -------------------------------------------------------------------
-  // LIVE MODE
-  // -------------------------------------------------------------------
   const pages: ScrapedPage[] = [];
 
-  const crawler = new CheerioCrawler({
-    respectRobotsTxtFile: true,
-    maxRequestsPerCrawl: 200,
-    navigationTimeoutSecs: 120,
-    requestHandlerTimeoutSecs: 120,
-    maxRequestRetries: 2,
+  for (const route of routes) {
+    const base = route.baseUrl ?? "https://sainamainamun.gov.np";
 
-    async requestHandler({ request, body, crawler: crawlerInstance }) {
-      const route = request.userData.route as RouteConfig | undefined;
-      const type = route?.type ?? "page";
-      const subFolder =
-        route?.subFolder ||
-        (route?.live ? extractSlugFromUrl(route.live) : undefined);
+    // Per-route queue so pages do not bleed between routes
+    const queue = await RequestQueue.open(`queue-${route.type}-${Date.now()}`);
 
-      pages.push({
-        type,
-        url: request.loadedUrl ?? request.url,
-        html: body.toString(),
-        subFolder,
-      });
+    // Seed the queue with the root listing URL
+    await queue.addRequest({
+      url: route.live,
+      userData: { route, isListingPage: true, pageNum: 1 },
+    });
 
-      if (route?.detailSelector) {
-        const links = extractDetailLinksFromHtml(
-          body.toString(),
-          route.detailSelector,
-        );
-        for (const link of links) {
-          await crawlerInstance.addRequests([
-            { url: link, userData: { route } },
-          ]);
+    const crawler = new CheerioCrawler({
+      requestQueue: queue,
+      maxConcurrency: 1,
+      maxRequestsPerCrawl: 500,
+      navigationTimeoutSecs: 120,
+      requestHandlerTimeoutSecs: 120,
+      maxRequestRetries: 2,
+
+      async requestHandler({ request, $, body }) {
+        const {
+          route: r,
+          isListingPage,
+          pageNum,
+        } = request.userData as {
+          route: RouteConfig;
+          isListingPage: boolean;
+          pageNum: number;
+        };
+
+        const fullHtml = body.toString();
+
+        // ── LISTING PAGE ──────────────────────────────────────────────────────
+        if (isListingPage) {
+          // 1. Discover and enqueue paginated pages (only from Page 1)
+          if (r.paginated && pageNum === 1) {
+            const paginatedUrls = extractPaginationUrls(fullHtml, base);
+            console.log(
+              `[Crawler] Route "${r.type}" (${r.live}): discovered ${paginatedUrls.length} additional page(s).`,
+            );
+            let nextPageNum = 2;
+            for (const url of paginatedUrls) {
+              await queue.addRequest({
+                url,
+                userData: {
+                  route: r,
+                  isListingPage: true,
+                  pageNum: nextPageNum++,
+                },
+              });
+            }
+          }
+
+          // 2a. If the route has a detail selector → enqueue detail pages; listing page itself is skipped.
+          if (r.detailSelector) {
+            const detailLinks = extractDetailLinksFromHtml(
+              fullHtml,
+              r.detailSelector,
+              base,
+            );
+            console.log(
+              `[Crawler] Route "${r.type}" page ${pageNum}: found ${detailLinks.length} detail link(s).`,
+            );
+            for (const url of detailLinks) {
+              try {
+                if (await isRecordExisting(url)) {
+                  console.log(
+                    `[Crawler] [Delta Skip] Record exists in DB: ${url}`,
+                  );
+                  continue;
+                }
+              } catch {
+                // If DB check fails or DB offline, continue crawl
+              }
+
+              await queue.addRequest({
+                url,
+                userData: { route: r, isListingPage: false, pageNum: 0 },
+              });
+            }
+            return; // listing page done — don't push it to pages[]
+          }
+
+          // 2b. No detail selector → listing page IS the content page.
+          const scopedHtml = r.contentSelector
+            ? scopeHtml(fullHtml, r.contentSelector)
+            : ($("body").html() ?? fullHtml);
+
+          console.log(
+            `[Crawler] Route "${r.type}" page ${pageNum}: pushing listing page (${request.loadedUrl ?? request.url}).`,
+          );
+          pages.push({
+            url: request.loadedUrl ?? request.url,
+            html: scopedHtml,
+            routeType: r.type,
+            category: extractSlugFromUrl(r.live),
+          });
+          return;
         }
-      }
-    },
-  });
 
-  const startRequests = routes.map((route) => ({
-    url: route.live,
-    userData: { route },
-  }));
+        // ── DETAIL PAGE ───────────────────────────────────────────────────────
+        const detailRouteType = r.detailType ?? r.type;
+        const targetSelector = r.detailContentSelector ?? r.contentSelector;
+        const scopedHtml = targetSelector
+          ? scopeHtml(fullHtml, targetSelector)
+          : ($("body").html() ?? fullHtml);
 
-  await crawler.run(startRequests);
+        console.log(
+          `[Crawler] Route "${r.type}" detail page: pushing (${request.loadedUrl ?? request.url}).`,
+        );
+        pages.push({
+          url: request.loadedUrl ?? request.url,
+          html: scopedHtml,
+          routeType: detailRouteType,
+          category: extractSlugFromUrl(r.live),
+        });
+      },
+
+      failedRequestHandler({ request }) {
+        console.warn(
+          `[Crawler] Failed to fetch: ${request.url} (${request.errorMessages?.join(", ")})`,
+        );
+      },
+    });
+
+    await crawler.run();
+    await queue.drop();
+  }
+
   return pages;
 }

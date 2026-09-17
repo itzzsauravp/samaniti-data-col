@@ -47,9 +47,6 @@ TypeScript web scraping and ETL pipeline monorepo designed to extract, transform
    ```env
    DATABASE_URL='postgres://username:password@localhost:5432/samanitidb?schema=public'
 
-   # Optional: Set to true if running scrapers locally using mock HTML pages
-   USE_MOCK=false
-
    # Optional: Skip file downloads if desired
    SKIP_FILE_DOWNLOADS=false
 
@@ -75,14 +72,6 @@ To run the crawler and scraper for Sainamaina Municipality (Lumbini Province):
 ```bash
 npm run scraper:sainamaina
 ```
-
-### Using Mock Pages (Offline / Development Mode)
-
-If you wish to test extraction using local HTML mock pages rather than hitting live government portals:
-
-1. Set `USE_MOCK=true` in your `.env` file.
-2. Ensure required mock HTML files are placed under the respective scraper's directory (e.g., `src/scrapers/lumbini/sainamaina-mun/mock-pages/`).
-3. Run the scraper command.
 
 ---
 

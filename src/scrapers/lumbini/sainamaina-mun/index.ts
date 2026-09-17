@@ -14,7 +14,7 @@ export class SainamainaScraper implements IMunicipalityScraper {
   public municipalityCode = MUNICIPALITY_CODE;
   public routes = ROUTES;
 
-  async extract(config: ScraperConfig): Promise<ScrapedPage[]> {
+  async extract(config?: ScraperConfig): Promise<ScrapedPage[]> {
     return extract(config);
   }
 
@@ -26,37 +26,36 @@ export class SainamainaScraper implements IMunicipalityScraper {
     return load(data);
   }
 
-  async run(config: ScraperConfig): Promise<void> {
+  async run(config?: ScraperConfig): Promise<void> {
     console.log(
-      `[SainamainaScraper] Starting ETL run for '${this.municipalityCode}' (useMocks: ${config.useMocks})`,
+      `[SainamainaScraper] Starting ETL run for '${this.municipalityCode}'`,
     );
 
     const pages = await this.extract(config);
     console.log(
-      `[SainamainaScraper] Extracted ${pages.length} page(s): ${pages.map((p) => p.type).join(", ")}`,
+      `[SainamainaScraper] Extracted ${pages.length} page(s). Processing incrementally...`,
     );
 
-    const data = await this.transform(pages);
-    const total =
-      (data.projects?.length ?? 0) +
-      (data.reports?.length ?? 0) +
-      (data.notices?.length ?? 0);
-    console.log(
-      `[SainamainaScraper] Transformed → ${total} records (${data.projects?.length ?? 0} projects, ${data.reports?.length ?? 0} reports, ${data.notices?.length ?? 0} notices)`,
-    );
-
-    await this.load(data);
+    for (const page of pages) {
+      try {
+        const partialData = await this.transform([page]);
+        await this.load(partialData);
+      } catch (err) {
+        console.error(
+          `[SainamainaScraper] Error processing page ${page.url}:`,
+          err,
+        );
+      }
+    }
     console.log(`[SainamainaScraper] ETL run completed successfully.`);
   }
 }
 
-// Run directly: USE_MOCK=true npm run scraper:sainamaina
+// Run directly: npm run scraper:sainamaina
 (async () => {
   const scraper = new SainamainaScraper();
   try {
-    const rawMock = process.env.USE_MOCK?.trim().toLowerCase().replace(/['"]/g, "");
-    const useMocks = rawMock === "true" || rawMock === "1";
-    await scraper.run({ useMocks });
+    await scraper.run();
   } catch (err) {
     console.error("[SainamainaScraper] Fatal error:", err);
     process.exit(1);
