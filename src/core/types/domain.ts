@@ -46,6 +46,7 @@ export interface ProjectData {
   type?: string | null;
   sourceUrl: string;
   documents?: DocumentData[];
+  metadata?: any;
 }
 
 export interface ReportData {
@@ -57,6 +58,7 @@ export interface ReportData {
   publishedDate?: string | null;
   sourceUrl: string;
   documents?: DocumentData[];
+  metadata?: any;
 }
 
 export interface NoticeData {
@@ -68,6 +70,7 @@ export interface NoticeData {
   publishedDate?: string | null;
   sourceUrl: string;
   documents?: DocumentData[];
+  metadata?: any;
 }
 
 export interface EtlPayload {

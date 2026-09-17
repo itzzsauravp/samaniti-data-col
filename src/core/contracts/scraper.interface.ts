@@ -1,33 +1,32 @@
 import { EtlPayload } from "../types/domain.js";
 
 export interface ScraperConfig {
-  useMocks: boolean;
+  timeoutMs?: number;
 }
 
 export interface RouteConfig {
-  type: string; // e.g., "profile", "notices", "reports", "projects"
-  subFolder?: string; // Optional folder name (e.g. "annual_progress_report"). If omitted, derived from URL slug
-  live: string; // live HTTP URL (first/listing page)
-  mock: string; // local absolute path to mock listing HTML
-  detailMock?: string; // local path to mock detail page HTML
-  detailSelector?: string; // CSS selector for detail "Read more" links on listing pages
-  detailType?: string; // scraped page type name for queued detail pages
-  paginated?: boolean; // true = follow ul.pager links to crawl all listing pages
-  baseUrl?: string; // required when paginated=true (e.g. "https://sainamainamun.gov.np")
+  type: string;
+  live: string;
+  baseUrl?: string;
+  paginated?: boolean;
+  contentSelector?: string; // For Listing Pages (e.g., ".view-content")
+  detailSelector?: string; // To extract detail URLs from Listing (e.g., ".views-row h2 a")
+  detailContentSelector?: string; // For Detail Pages (e.g., ".region-content" or "#content")
+  detailType?: string;
 }
 
 export interface ScrapedPage {
-  type: string;
   url: string;
-  html: string;
-  subFolder?: string; // Resolved subfolder for storage (e.g. "annual_progress_report")
+  html: string; // Scoped HTML fragment (or full body if no contentSelector)
+  routeType: string; // Carries route.type through extraction for transformer dispatch
+  category?: string; // this will basically be mapped as 'type' in the database
 }
 
 export interface IMunicipalityScraper {
   municipalityCode: string;
   routes?: RouteConfig[];
-  extract(config: ScraperConfig): Promise<ScrapedPage[]>;
+  extract(config?: ScraperConfig): Promise<ScrapedPage[]>;
   transform(pages: ScrapedPage[]): Promise<EtlPayload> | EtlPayload;
   load(data: EtlPayload): Promise<void>;
-  run(config: ScraperConfig): Promise<void>;
+  run(config?: ScraperConfig): Promise<void>;
 }

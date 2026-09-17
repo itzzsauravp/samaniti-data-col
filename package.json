@@ -1,52 +1,73 @@
 {
-  "name": "samaniti-data-col",
-  "version": "1.0.0",
-  "description": "TypeScript web scraping ETL monorepo for public local government portal data in Nepal",
-  "type": "module",
-  "main": "dist/index.js",
-  "workspaces": [
-    "src/web/backend",
-    "src/web/frontend"
-  ],
-  "scripts": {
-    "build": "tsc && npm --workspace=src/web/frontend run build",
-    "start": "concurrently \"npm run web:backend:dev\" \"npm run web:frontend:dev\"",
-    "db:generate": "prisma generate",
-    "db:push": "prisma db push",
-    "scraper:sainamaina": "tsx src/scrapers/lumbini/sainamaina-mun/index.ts",
-    "web:backend:dev": "npm --workspace=src/web/backend run dev",
-    "web:backend:start": "npm --workspace=src/web/backend start",
-    "web:frontend:dev": "npm --workspace=src/web/frontend run dev",
-    "web:frontend:build": "npm --workspace=src/web/frontend run build",
-    "g0": "echo \"================ Please do not try this at home!!! ================ \" && psql -h localhost -U sauravp -d postgres -c \"DROP DATABASE samanitidb WITH (FORCE)\" && prisma migrate deploy && rm -rf ./storage"
-  },
-  "keywords": [
-    "scraping",
-    "etl",
-    "nepal",
-    "local-government",
-    "crawlee",
-    "prisma"
-  ],
-  "author": "",
-  "license": "MIT",
-  "dependencies": {
-    "@prisma/adapter-pg": "^7.10.0",
-    "@prisma/client": "^7.10.0",
-    "cheerio": "1.0.0-rc.12",
-    "crawlee": "^3.8.2",
-    "dotenv": "^17.4.2",
-    "nepali-date-converter": "^3.4.0",
-    "pg": "^8.23.0",
-    "undici": "^8.10.2"
-  },
-  "devDependencies": {
-    "@types/node": "^20.11.24",
-    "@types/pg": "^8.23.1",
-    "concurrently": "^10.0.5",
-    "prisma": "^7.10.0",
-    "ts-node": "^10.9.2",
-    "tsx": "^4.23.13",
-    "typescript": "^5.3.3"
-  }
+    "name": "samaniti-data-col",
+    "version": "1.0.0",
+    "description": "TypeScript web scraping ETL monorepo for public local government portal data in Nepal",
+    "type": "module",
+    "main": "dist/index.js",
+    "workspaces": [
+        "src/web/backend",
+        "src/web/frontend"
+    ],
+    "scripts": {
+        "build": "tsc && npm --workspace=src/web/frontend run build",
+        "start": "concurrently \"npm run web:backend:dev\" \"npm run web:frontend:dev\"",
+        "db:generate": "prisma generate",
+        "db:push": "prisma db push",
+        "db:reset": "tsx scripts/reset-db.ts",
+        "scraper:sainamaina": "tsx src/scrapers/lumbini/sainamaina-mun/index.ts",
+        "web:backend:dev": "npm --workspace=src/web/backend run dev",
+        "web:backend:start": "npm --workspace=src/web/backend start",
+        "web:frontend:dev": "npm --workspace=src/web/frontend run dev",
+        "web:frontend:build": "npm --workspace=src/web/frontend run build",
+        "prepare": "husky",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
+        "format": "prettier --write .",
+        "format:check": "prettier --check ."
+    },
+    "lint-staged": {
+        "*.{ts,tsx,js,jsx}": [
+            "eslint --fix",
+            "prettier --write"
+        ],
+        "*.{json,md,yaml,yml}": [
+            "prettier --write"
+        ]
+    },
+    "keywords": [
+        "scraping",
+        "etl",
+        "nepal",
+        "local-government",
+        "crawlee",
+        "prisma"
+    ],
+    "author": "",
+    "license": "MIT",
+    "dependencies": {
+        "@prisma/adapter-pg": "^7.10.0",
+        "@prisma/client": "^7.10.0",
+        "cheerio": "1.0.0-rc.12",
+        "crawlee": "^3.8.2",
+        "dotenv": "^17.4.2",
+        "nepali-date-converter": "^3.4.0",
+        "pg": "^8.23.0",
+        "undici": "^8.10.2"
+    },
+    "devDependencies": {
+        "@types/node": "^20.11.24",
+        "@types/pg": "^8.23.1",
+        "@typescript-eslint/eslint-plugin": "^8.70.0",
+        "@typescript-eslint/parser": "^8.70.0",
+        "concurrently": "^10.0.5",
+        "eslint": "^10.10.0",
+        "eslint-config-prettier": "^10.1.8",
+        "husky": "^9.1.7",
+        "lint-staged": "^17.5.1",
+        "prettier": "^3.9.7",
+        "prisma": "^7.10.0",
+        "ts-node": "^10.9.2",
+        "tsx": "^4.23.13",
+        "typescript": "^5.3.3"
+    }
 }
