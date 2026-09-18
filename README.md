@@ -4,12 +4,21 @@ TypeScript web scraping and ETL pipeline monorepo designed to extract, transform
 
 ---
 
+## What It Does
+
+- **Crawls & Scrapes Municipal Portals**: Leverages Crawlee and Cheerio to dynamically crawl listings, pagination, and document links across local government websites in Nepal (e.g., Lumbini Province municipalities like Sainamaina and Kanchan).
+- **Parses & Transforms**: Cleans and normalizes HTML content into structured domain entities (Projects, Reports, Notices, Municipality Profiles) with support for Nepali fiscal years, dates, and file attachments.
+- **Local Storage & Database ETL**: Automatically downloads document attachments (PDFs, docs) into organized local storage directories (`storage/`) and upserts records reliably into PostgreSQL using Prisma ORM.
+- **Dynamic Scraper Runner**: Provides a flexible CLI utility (`runner.ts`) to run any municipality scraper dynamically across provinces and municipalities.
+
+---
+
 ## Tech Stack
 
 - **Language**: TypeScript (Node.js)
 - **Scraping / Parsing**: Crawlee, Cheerio, Undici
 - **Database / ORM**: PostgreSQL, Prisma
-- **Utilities**: `nepali-date-converter`, `dotenv`
+- **Utilities**: `nepali-date-converter`, `dotenv`, `tsx`
 
 ---
 
@@ -24,54 +33,55 @@ TypeScript web scraping and ETL pipeline monorepo designed to extract, transform
 
 1. **Clone the repository**:
 
-   ```bash
-   git clone https://github.com/samaniti/samaniti-data-col.git
-   cd samaniti-data-col
-   ```
+    ```bash
+    git clone https://github.com/itzzsauravp/samaniti-data-col.git
+    cd samaniti-data-col
+    ```
 
 2. **Install dependencies**:
 
-   ```bash
-   npm install
-   ```
+    ```bash
+    npm install
+    ```
 
 3. **Configure Environment Variables**:
    Copy the example environment file and update it with your database credentials and configuration options:
 
-   ```bash
-   cp .env.example .env
-   ```
+    ```bash
+    cp .env.example .env
+    ```
 
-   Update `.env`:
+    Update `.env`:
 
-   ```env
-   DATABASE_URL='postgres://username:password@localhost:5432/samanitidb?schema=public'
+    ```env
+    DATABASE_URL='postgres://username:password@localhost:5432/samanitidb?schema=public'
 
-   # Optional: Skip file downloads if desired
-   SKIP_FILE_DOWNLOADS=false
+    # Optional: Skip file downloads if desired
+    SKIP_FILE_DOWNLOADS=false
 
-   # Optional: Timeout for file downloads in milliseconds
-   FILE_DOWNLOAD_TIMEOUT_MS=60000
-   ```
+    # Optional: Timeout for file downloads in milliseconds
+    FILE_DOWNLOAD_TIMEOUT_MS=60000
+    ```
 
 4. **Initialize the Database**:
    Generate the Prisma client and run migrations against your PostgreSQL database:
-   ```bash
-   npm run db:generate
-   npx prisma migrate dev --name init
-   ```
+    ```bash
+    npm run db:generate
+    npx prisma db push
+    ```
 
 ---
 
 ## Running Scrapers
 
-### Sainamaina Municipality Scraper
-
-To run the crawler and scraper for Sainamaina Municipality (Lumbini Province):
+Use the dynamic runner script to execute any municipality scraper by specifying its `<province>:<municipality>`:
 
 ```bash
-npm run scraper:sainamaina
+npm run scraper lumbini:sainamaina
+npm run scraper lumbini:kanchan
 ```
+
+If run without arguments, it will automatically list all available province and municipality scrapers in the repository.
 
 ---
 
@@ -83,14 +93,17 @@ npm run scraper:sainamaina
 │   └── schema.prisma       # Prisma database schema (Municipalities, Projects, Reports, Notices)
 ├── src/
 │   ├── core/
+│   │   ├── constants/      # Shared constants & base transformers
 │   │   ├── contracts/      # Scraper interfaces and base contracts
 │   │   ├── db/             # Database loader and persistence logic
 │   │   ├── scraper/        # Crawlee crawler configuration
 │   │   ├── types/          # Shared domain types
-│   │   └── utils/          # File download and helper utilities
+│   │   └── utils/          # File download, HTML, pagination, and helper utilities
 │   └── scrapers/
 │       └── lumbini/
-│           └── sainamaina-mun/  # Sainamaina Municipality scraper (index, extract, transform, utils)
+│           ├── sainamaina-mun/  # Sainamaina Municipality scraper
+│           └── kanchan-mun/     # Kanchan Municipality scraper
+├── runner.ts               # Dynamic CLI runner utility
 └── package.json
 ```
 
@@ -99,9 +112,10 @@ npm run scraper:sainamaina
 ## Scripts
 
 - `npm run build`: Compile TypeScript code to JavaScript (`dist/`)
-- `npm start`: Run the compiled main application
+- `npm run scraper <province>:<municipality>`: Run any municipality ETL scraper dynamically (e.g. `npm run scraper lumbini:sainamaina`)
 - `npm run db:generate`: Generate Prisma client
-- `npm run scraper:sainamaina`: Run the Sainamaina Municipality ETL scraper
+- `npm run db:push`: Push Prisma schema to database
+- `npm run lint`: Run ESLint
 
 ---
 

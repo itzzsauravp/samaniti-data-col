@@ -14,7 +14,7 @@
         "db:generate": "prisma generate",
         "db:push": "prisma db push",
         "db:reset": "tsx scripts/reset-db.ts",
-        "scraper:sainamaina": "tsx src/scrapers/lumbini/sainamaina-mun/index.ts",
+        "scraper": "tsx runner.ts",
         "web:backend:dev": "npm --workspace=src/web/backend run dev",
         "web:backend:start": "npm --workspace=src/web/backend start",
         "web:frontend:dev": "npm --workspace=src/web/frontend run dev",

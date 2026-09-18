@@ -1,4 +1,6 @@
-import { load as cheerioLoad, CheerioAPI } from "cheerio";
+import { load as cheerioLoad, CheerioAPI, Cheerio, Element } from "cheerio";
+import { DocumentData } from "../types/domain.js";
+import path from "node:path";
 
 /**
  * Scopes a full page HTML string down to the inner HTML of the first element
@@ -55,7 +57,13 @@ export function extractTitle($: CheerioAPI): string {
 /**
  * Extracts PDF/document links from HTML.
  */
-export function extractDocumentLinks($: CheerioAPI, baseUrl: string): string[] {
+export function extractDocumentLinks(
+    $: CheerioAPI,
+    baseUrl: string,
+    $context?: Cheerio<Element>,
+    hrefPattern?: RegExp | string,
+    extraClass?: string,
+): DocumentData[] {
     const fileExtensions = ["pdf", "doc", "docx", "xls", "xlsx", "zip", "png", "jpg", "jpeg"];
 
     const extensionSelectors = fileExtensions.flatMap((ext) => [
@@ -64,30 +72,70 @@ export function extractDocumentLinks($: CheerioAPI, baseUrl: string): string[] {
         `a[href*='.${ext}&']`,
     ]);
 
-    const selectors = [
+    const baseSelectors = [
         ".field-name-field-supporting-documents a",
         ".field-type-file a",
         ".file a",
         ...extensionSelectors,
     ];
 
-    // Use a Set to automatically deduplicate URLs
-    const links = new Set<string>();
+    // Format extra class/selector (ensures leading dot if passed as "my-class")
+    const formattedClass = extraClass
+        ? extraClass.trim().startsWith(".")
+            ? extraClass.trim()
+            : `.${extraClass.trim()}`
+        : "";
+
+    // Append extra class/selector to each base selector if provided
+    const selectors = formattedClass
+        ? baseSelectors.map((sel) => `${sel}${formattedClass}`)
+        : baseSelectors;
+
+    const container = $context ?? $.root();
+    const documentsMap = new Map<string, DocumentData>();
+
+    // Normalize pattern to RegExp if a string is provided
+    const pattern = typeof hrefPattern === "string" ? new RegExp(hrefPattern) : hrefPattern;
 
     for (const selector of selectors) {
-        $(selector).each((_, el) => {
-            const href = $(el).attr("href");
+        container.find(selector).each((_: number, el: any) => {
+            const $el = $(el);
+            const href = $el.attr("href");
+
             if (!href || href.startsWith("data:") || href.startsWith("javascript:")) return;
 
+            // Check if href matches the user-provided regex pattern
+            if (pattern && !pattern.test(href)) return;
+
             try {
-                // native URL constructor safely handles relative paths and slashes
                 const absoluteUrl = new URL(href, baseUrl).href;
-                links.add(absoluteUrl);
+
+                // Skip if we already processed this exact URL in the current scope
+                if (documentsMap.has(absoluteUrl)) return;
+
+                // Extract filename from anchor text or fallback to URL pathname
+                const urlPath = new URL(absoluteUrl).pathname;
+                const linkText = $el.text().trim();
+                const fallbackName = path.basename(urlPath) || "document";
+                const fileName = linkText.length > 0 ? linkText : fallbackName;
+
+                // Extract extension/fileType if available
+                const ext = path.extname(urlPath).replace(".", "").toLowerCase();
+                const fileType = ext || null;
+
+                documentsMap.set(absoluteUrl, {
+                    fileName,
+                    fileType,
+                    originalUrl: absoluteUrl,
+                    storagePath: null,
+                    downloadStatus: "skipped",
+                    downloadError: null,
+                });
             } catch {
-                // Ignore malformed or invalid URLs
+                // Ignore malformed URLs
             }
         });
     }
 
-    return Array.from(links);
+    return Array.from(documentsMap.values());
 }

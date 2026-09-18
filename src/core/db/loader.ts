@@ -199,6 +199,8 @@ export async function upsertNotice(data: NoticeData): Promise<void> {
  * Master loader method to run all domain upserts sequentially for a scraper execution.
  */
 export async function loadEtlData(payload: EtlPayload): Promise<void> {
+    console.log("ETL Payload:", payload);
+
     // 1. Upsert target municipality base record
     await upsertMunicipality(payload.municipality);
 

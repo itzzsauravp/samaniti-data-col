@@ -1,7 +1,11 @@
 import { CheerioCrawler, RequestQueue } from "crawlee";
 import { RouteConfig, ScrapedPage, ScraperConfig } from "../contracts/scraper.interface.js";
-import { extractPaginationUrls } from "../../scrapers/lumbini/sainamaina-mun/utils/paginate.js";
-import { extractSlugFromUrl, scopeHtml, extractLinksFromHtml } from "../utils/index.js";
+import {
+    extractPaginationUrls,
+    extractSlugFromUrl,
+    scopeHtml,
+    extractLinksFromHtml,
+} from "../utils/index.js";
 
 /**
  * Generic sequential crawler built on Crawlee's CheerioCrawler.
