@@ -27,6 +27,7 @@ export const BARDAGHAT_SITE: SiteConfig = {
       detailSelector: "table.views-table tbody tr td.views-field-title a",
       detailType: "noticeDetail",
       paginated: true,
+      maxPages: 40,
       selectors: {
           "rows": "table.views-table tbody tr",
           "dateField": null,

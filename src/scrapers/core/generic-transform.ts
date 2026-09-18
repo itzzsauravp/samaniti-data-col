@@ -143,7 +143,13 @@ async function transformEntityPage(
     const $item = $(el);
     const $titleLink = $item.find(selectors.titleLink);
     const titleNe = $titleLink.text().trim() || selectors.defaultRowTitle;
-    const rawSourceUrl = $titleLink.attr("href") || page.url;
+    const rawSourceUrl = $titleLink.attr("href") ?? "";
+    if (!titleNe.trim() || !rawSourceUrl) {
+      console.log(
+        `[Row Skip] ${entity.type} skipped (no title or link): "${titleNe}" @ ${page.url}`,
+      );
+      continue;
+    }
     const sourceUrl = toAbsolute(site.baseUrl, rawSourceUrl);
 
     if (isFilteredOut(filter, titleNe)) {
@@ -221,6 +227,12 @@ async function transformEntityPage(
 
   if (useDetail) {
     const titleNe = evalDetailTitle($, selectors, typeLabel);
+    if (!titleNe.trim()) {
+      console.log(
+        `[Detail Skip] ${entity.type} detail page without a resolvable title: ${page.url}`,
+      );
+      return {};
+    }
 
     if (entity.type === "notice") {
       const contentNe = $(selectors.bodyField).text().trim() || null;

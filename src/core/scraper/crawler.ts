@@ -145,19 +145,13 @@ export async function crawlRoutes(
     routes.find((r) => r.siteCode)?.siteCode,
   );
 
-  const crawler = new CheerioCrawler({
-    ...(storageDir
-        ? {
-            config: new Configuration({
-              storageClientOptions: { localDataDirectory: storageDir },
-            }),
-          }
-        : {}),
-    respectRobotsTxtFile: true,
-    maxRequestsPerCrawl: 200,
-    navigationTimeoutSecs: 120,
-    requestHandlerTimeoutSecs: 120,
-    maxRequestRetries: 2,
+  const crawler = new CheerioCrawler(
+    {
+      respectRobotsTxtFile: true,
+      maxRequestsPerCrawl: 200,
+      navigationTimeoutSecs: 120,
+      requestHandlerTimeoutSecs: 120,
+      maxRequestRetries: 2,
 
     async requestHandler({ request, body, crawler: crawlerInstance }) {
       const route = request.userData.route as RouteConfig | undefined;
@@ -206,7 +200,13 @@ export async function crawlRoutes(
         }
       }
     },
-  });
+    },
+    storageDir
+      ? new Configuration({
+          storageClientOptions: { localDataDirectory: storageDir },
+        })
+      : undefined,
+  );
 
   const startRequests = routes.map((route) => ({
     url: route.live,
