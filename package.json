@@ -14,6 +14,11 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "scraper:sainamaina": "tsx src/scrapers/lumbini/sainamaina-mun/index.ts",
+    "scrape": "tsx src/scrapers/run.ts",
+    "scrape:all": "tsx src/scrapers/run.ts --all",
+    "new:site": "node scripts/new-site.mjs",
+    "detect:stack": "node scripts/detect-stack.mjs",
+    "extract:pdfs": "tsx src/core/pdf/run-extract.ts",
     "web:backend:dev": "npm --workspace=src/web/backend run dev",
     "web:backend:start": "npm --workspace=src/web/backend start",
     "web:frontend:dev": "npm --workspace=src/web/frontend run dev",
@@ -36,8 +41,10 @@
     "cheerio": "1.0.0-rc.12",
     "crawlee": "^3.8.2",
     "dotenv": "^17.4.2",
+    "mupdf": "^1.28.1",
     "nepali-date-converter": "^3.4.0",
     "pg": "^8.23.0",
+    "tesseract.js": "^7.0.0",
     "undici": "^8.10.2"
   },
   "devDependencies": {

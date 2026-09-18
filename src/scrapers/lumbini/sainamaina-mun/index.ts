@@ -9,6 +9,7 @@ import { extract, ROUTES } from "./extract.js";
 import { transform, MUNICIPALITY_CODE } from "./transform.js";
 import { load } from "./load.js";
 import { prisma } from "../../../core/db/loader.js";
+import { exportEtlToTextIfEnabled } from "../../../core/export/index.js";
 
 export class SainamainaScraper implements IMunicipalityScraper {
   public municipalityCode = MUNICIPALITY_CODE;
@@ -47,6 +48,13 @@ export class SainamainaScraper implements IMunicipalityScraper {
 
     await this.load(data);
     console.log(`[SainamainaScraper] ETL run completed successfully.`);
+
+    const exported = await exportEtlToTextIfEnabled(data);
+    for (const file of exported) {
+      console.log(
+        `[SainamainaScraper] Exported TXT transcript (${file.recordCount} records): ${file.path}`,
+      );
+    }
   }
 }
 

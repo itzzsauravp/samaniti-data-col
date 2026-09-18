@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { startScraperCron } from './scraper-cron.js';
 
 const app = express();
 const adapter = new PrismaPg(process.env.DATABASE_URL);
@@ -70,4 +71,5 @@ app.get('/api/documents/:id/download', async (req, res) => {
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`Backend running on port ${PORT}`);
+  startScraperCron();
 });

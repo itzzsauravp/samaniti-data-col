@@ -112,10 +112,32 @@ model Document {
   createdAt      DateTime @default(now()) @map("created_at")
   downloadError  String?  @map("download_error")
   downloadStatus String   @default("pending") @map("download_status")
+  extractedText  String?  @map("extracted_text")
+  extractionStatus String @default("pending") @map("extraction_status")
+  extractionMethod String? @map("extraction_method")
   updatedAt      DateTime @updatedAt @map("updated_at")
   notice         Notice?  @relation(fields: [noticeId], references: [id], onDelete: Cascade)
   project        Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
   report         Report?  @relation(fields: [reportId], references: [id], onDelete: Cascade)
 
   @@map("documents")
+}
+
+model ScrapeRunLog {
+  id               String    @id @default(uuid())
+  municipalityCode String?   @map("municipality_code")
+  siteCode         String?   @map("site_code")
+  status           String    @default("running")
+  trigger          String    @default("manual")
+  pagesCrawled     Int       @default(0) @map("pages_crawled")
+  projectsCount    Int       @default(0) @map("projects_count")
+  reportsCount     Int       @default(0) @map("reports_count")
+  noticesCount     Int       @default(0) @map("notices_count")
+  durationMs       Int?      @map("duration_ms")
+  errorMessage     String?   @map("error_message")
+  startedAt        DateTime  @default(now()) @map("started_at")
+  finishedAt       DateTime? @map("finished_at")
+
+  @@index([siteCode, startedAt])
+  @@map("scrape_run_logs")
 }

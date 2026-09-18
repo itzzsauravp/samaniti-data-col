@@ -1,0 +1,16 @@
+{
+  "municipalities": [
+    {
+      "code": "SAINAMAINA",
+      "nameNe": "सैनामैना नगरपालिका",
+      "nameEn": "Sainamaina Municipality",
+      "province": "Lumbini",
+      "district": "Rupandehi",
+      "baseUrl": "https://sainamainamun.gov.np",
+      "stack": "drupal7",
+      "config": "./configs/sainamaina.js",
+      "exportName": "SAINAMAINA_SITE",
+      "enabled": true
+    }
+  ]
+}

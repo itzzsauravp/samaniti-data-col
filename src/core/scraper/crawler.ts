@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { load as cheerioLoad } from "cheerio";
-import { CheerioCrawler } from "crawlee";
+import { CheerioCrawler, Configuration } from "crawlee";
 import {
   RouteConfig,
   ScrapedPage,
@@ -11,20 +11,30 @@ import {
   extractPaginationUrls,
   getMockPaginatedPages,
 } from "../../scrapers/lumbini/sainamaina-mun/utils/paginate.js";
-import { extractSlugFromUrl } from "../utils/index.js";
+import { extractSlugFromUrl, filterUrls, hostOfBase } from "../utils/index.js";
 
 const BASE_URL = "https://sainamainamun.gov.np";
+
+/** Absolute per-site crawlee storage directory (keeps site queues isolated). */
+function crawleeStorageDir(siteCode?: string): string | null {
+  if (!siteCode) return null;
+  return path.join(process.cwd(), "storage", "crawlee", siteCode.toLowerCase());
+}
 
 /**
  * Extracts all detail-page hrefs from a listing page HTML string.
  */
-function extractDetailLinksFromHtml(html: string, selector: string): string[] {
+function extractDetailLinksFromHtml(
+  html: string,
+  selector: string,
+  baseUrl: string,
+): string[] {
   const $ = cheerioLoad(html);
   const links: string[] = [];
   $(selector).each((_, el) => {
     const href = $(el).attr("href");
     if (!href) return;
-    const absolute = href.startsWith("http") ? href : `${BASE_URL}${href}`;
+    const absolute = href.startsWith("http") ? href : `${baseUrl}${href}`;
     links.push(absolute);
   });
   return links;
@@ -33,7 +43,7 @@ function extractDetailLinksFromHtml(html: string, selector: string): string[] {
 /**
  * Generic crawler that extracts pages from a configured list of routes.
  * Supports both local mock files and live HTTP crawling via Crawlee.
- * Handles paginated listing pages and detail-page queueing.
+ * Handles URL filtering, paginated listing pages and detail-page queueing.
  */
 export async function crawlRoutes(
   routes: RouteConfig[],
@@ -50,16 +60,24 @@ export async function crawlRoutes(
         type ListingPage = { url: string; html: string };
         const listingPages: ListingPage[] = [];
         const subFolder = route.subFolder || extractSlugFromUrl(route.live);
+        const base = route.baseUrl ?? BASE_URL;
+        const defaultDomain = hostOfBase(base);
 
         const firstHtml = await fs.readFile(route.mock, "utf-8");
         listingPages.push({ url: route.live, html: firstHtml });
 
         if (route.paginated) {
-          const base = route.baseUrl ?? BASE_URL;
-          const extraPages = await getMockPaginatedPages(route.mock, base);
-          listingPages.push(...extraPages);
+          const extraPages = await getMockPaginatedPages(route.mock, base, {
+            pagerSelector: route.pagerSelector,
+            maxPages: route.maxPages,
+          });
+          for (const p of extraPages) {
+            if (filterUrls([p.url], route.urlFilters, defaultDomain).length) {
+              listingPages.push(p);
+            }
+          }
           console.log(
-            `[crawlRoutes (mock)] Paginated route '${route.type}' (${subFolder}): found ${extraPages.length} extra page(s)`,
+            `[crawlRoutes (mock)] Paginated route '${route.type}' (${subFolder}): ${listingPages.length} page(s)`,
           );
         }
 
@@ -73,21 +91,24 @@ export async function crawlRoutes(
                 );
           const detailHtml = await fs.readFile(detailMockPath, "utf-8");
           const detailType = route.detailType ?? `${route.type}Detail`;
-          const allDetailUrls = new Set<string>();
 
+          const links: string[] = [];
           for (const { html } of listingPages) {
-            const links = extractDetailLinksFromHtml(
-              html,
-              route.detailSelector,
+            links.push(
+              ...extractDetailLinksFromHtml(html, route.detailSelector, base),
             );
-            links.forEach((l) => allDetailUrls.add(l));
           }
-
-          console.log(
-            `[crawlRoutes (mock)] Route '${route.type}' (${subFolder}): queued ${allDetailUrls.size} unique detail page(s)`,
+          const allowedDetailUrls = filterUrls(
+            links,
+            route.urlFilters,
+            defaultDomain,
           );
 
-          for (const url of allDetailUrls) {
+          console.log(
+            `[crawlRoutes (mock)] Route '${route.type}' (${subFolder}): queued ${allowedDetailUrls.length} unique detail page(s)`,
+          );
+
+          for (const url of allowedDetailUrls) {
             pages.push({
               type: detailType,
               url,
@@ -120,8 +141,18 @@ export async function crawlRoutes(
   // LIVE MODE
   // -------------------------------------------------------------------
   const pages: ScrapedPage[] = [];
+  const storageDir = crawleeStorageDir(
+    routes.find((r) => r.siteCode)?.siteCode,
+  );
 
   const crawler = new CheerioCrawler({
+    ...(storageDir
+        ? {
+            config: new Configuration({
+              storageClientOptions: { localDataDirectory: storageDir },
+            }),
+          }
+        : {}),
     respectRobotsTxtFile: true,
     maxRequestsPerCrawl: 200,
     navigationTimeoutSecs: 120,
@@ -134,6 +165,8 @@ export async function crawlRoutes(
       const subFolder =
         route?.subFolder ||
         (route?.live ? extractSlugFromUrl(route.live) : undefined);
+      const base = route?.baseUrl ?? BASE_URL;
+      const defaultDomain = hostOfBase(base);
 
       pages.push({
         type,
@@ -142,15 +175,34 @@ export async function crawlRoutes(
         subFolder,
       });
 
-      if (route?.detailSelector) {
+      // Follow pagination for listing pages (filtered + capped).
+      if (route?.paginated) {
+        const pagerUrls = extractPaginationUrls(
+          body.toString(),
+          base,
+          route.pagerSelector,
+          route.maxPages,
+        );
+        const allowed = filterUrls(pagerUrls, route.urlFilters, defaultDomain);
+        if (allowed.length > 0) {
+          await crawlerInstance.addRequests(
+            allowed.map((url) => ({ url, userData: { route } })),
+          );
+        }
+      }
+
+      // Queue detail pages found on this listing page (filtered).
+      if (route?.detailSelector && route.detailType) {
         const links = extractDetailLinksFromHtml(
           body.toString(),
           route.detailSelector,
+          base,
         );
-        for (const link of links) {
-          await crawlerInstance.addRequests([
-            { url: link, userData: { route } },
-          ]);
+        const allowed = filterUrls(links, route.urlFilters, defaultDomain);
+        if (allowed.length > 0) {
+          await crawlerInstance.addRequests(
+            allowed.map((url) => ({ url, userData: { route } })),
+          );
         }
       }
     },
