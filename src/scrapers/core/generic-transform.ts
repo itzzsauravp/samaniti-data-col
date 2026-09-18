@@ -32,6 +32,21 @@ function toAbsolute(baseUrl: string, url: string): string {
   return url.startsWith("http") ? url : `${baseUrl}${url}`;
 }
 
+/**
+ * Builds a canonical content URL: strips pager query params (`page`) that some
+ * servers append to every detail link (broken pagination), so the same notice
+ * is not stored once per `?page=N`.
+ */
+export function normalizeSourceUrl(baseUrl: string, url: string): string {
+  try {
+    const parsed = new URL(toAbsolute(baseUrl, url));
+    parsed.searchParams.delete("page");
+    return parsed.toString();
+  } catch {
+    return toAbsolute(baseUrl, url);
+  }
+}
+
 /** Builds a document record with the site's base URL and metadata. */
 export async function buildSiteDocument(
   site: SiteConfig,
@@ -150,7 +165,7 @@ async function transformEntityPage(
       );
       continue;
     }
-    const sourceUrl = toAbsolute(site.baseUrl, rawSourceUrl);
+    const sourceUrl = normalizeSourceUrl(site.baseUrl, rawSourceUrl);
 
     if (isFilteredOut(filter, titleNe)) {
       console.log(`[Keyword Skip] ${entity.type} filtered out: ${titleNe}`);
@@ -255,7 +270,7 @@ async function transformEntityPage(
         contentNe,
         type: typeLabel,
         publishedDate: null,
-        sourceUrl: page.url,
+        sourceUrl: normalizeSourceUrl(site.baseUrl, page.url),
         documents,
       });
     } else if (entity.type === "report") {
@@ -278,7 +293,7 @@ async function transformEntityPage(
         type: typeLabel,
         fiscalYear: parseNepaliFiscalYear(titleNe) || null,
         publishedDate: null,
-        sourceUrl: page.url,
+        sourceUrl: normalizeSourceUrl(site.baseUrl, page.url),
         documents,
       });
     } else {
@@ -303,7 +318,7 @@ async function transformEntityPage(
         status: "",
         wardNo: null,
         type: typeLabel,
-        sourceUrl: page.url,
+        sourceUrl: normalizeSourceUrl(site.baseUrl, page.url),
         documents,
       });
     }

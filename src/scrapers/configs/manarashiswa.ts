@@ -27,7 +27,7 @@ export const MANARASHISWA_SITE: SiteConfig = {
       detailSelector: ".views-field-title a",
       detailType: "noticeDetail",
       paginated: true,
-      maxPages: 40,
+      maxPages: 12,
       selectors: {
           rows: ".view-display-id-page .views-row",
           titleLink: ".views-field-title a",

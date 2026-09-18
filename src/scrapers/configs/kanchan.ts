@@ -27,7 +27,7 @@ export const KANCHAN_SITE: SiteConfig = {
       detailSelector: "li.node-readmore a",
       detailType: "noticeDetail",
       paginated: true,
-      maxPages: 40,
+      maxPages: 30,
       selectors: {
         rows: ".region-content .views-row",
         titleLink: ".node h2 a",

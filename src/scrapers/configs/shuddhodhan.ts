@@ -27,7 +27,7 @@ export const SHUDDHODHAN_SITE: SiteConfig = {
       detailSelector: "li.node-readmore a",
       detailType: "noticeDetail",
       paginated: true,
-      maxPages: 60,
+      maxPages: 45,
       selectors: {
         rows: ".region-content .views-row",
         titleLink: ".node h2 a",

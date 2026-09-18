@@ -12,6 +12,7 @@ import {
   getMockPaginatedPages,
 } from "../../scrapers/lumbini/sainamaina-mun/utils/paginate.js";
 import { extractSlugFromUrl, filterUrls, hostOfBase } from "../utils/index.js";
+import { normalizeSourceUrl } from "../../scrapers/core/generic-transform.js";
 
 const BASE_URL = "https://sainamainamun.gov.np";
 
@@ -145,6 +146,12 @@ export async function crawlRoutes(
     routes.find((r) => r.siteCode)?.siteCode,
   );
 
+  // Track normalized detail links + listing signatures for this crawl run so
+  // servers with broken pagination (every ?page=N returns the same content)
+  // only get crawled/queued once.
+  const seenDetailUrls = new Set<string>();
+  const seenSignatures = new Set<string>();
+
   const crawler = new CheerioCrawler(
     {
       respectRobotsTxtFile: true,
@@ -169,35 +176,54 @@ export async function crawlRoutes(
         subFolder,
       });
 
-      // Follow pagination for listing pages (filtered + capped).
-      if (route?.paginated) {
+      // Queue detail pages found on this listing page (filtered + normalized,
+      // so broken pagination that re-lists the same notices is crawled once).
+      const links = route?.detailSelector
+        ? extractDetailLinksFromHtml(
+            body.toString(),
+            route.detailSelector,
+            base,
+          )
+        : [];
+      const allowed = filterUrls(links, route?.urlFilters, defaultDomain);
+      const normalizedLinks: string[] = [];
+      for (const url of allowed) {
+        const normalized = normalizeSourceUrl(base, url);
+        if (!seenDetailUrls.has(normalized)) {
+          seenDetailUrls.add(normalized);
+          normalizedLinks.push(normalized);
+        }
+      }
+
+      const signature = [...new Set(normalizedLinks)].sort().join("|");
+      const repeatedPage = seenSignatures.has(signature) && signature !== "";
+      seenSignatures.add(signature);
+
+      // Follow pagination for listing pages (filtered + capped), unless this
+      // page is an exact repeat of a previously seen listing (broken server).
+      if (route?.paginated && !repeatedPage) {
         const pagerUrls = extractPaginationUrls(
           body.toString(),
           base,
           route.pagerSelector,
           route.maxPages,
         );
-        const allowed = filterUrls(pagerUrls, route.urlFilters, defaultDomain);
-        if (allowed.length > 0) {
+        const allowedPager = filterUrls(
+          pagerUrls,
+          route?.urlFilters,
+          defaultDomain,
+        );
+        if (allowedPager.length > 0) {
           await crawlerInstance.addRequests(
-            allowed.map((url) => ({ url, userData: { route } })),
+            allowedPager.map((url) => ({ url, userData: { route } })),
           );
         }
       }
 
-      // Queue detail pages found on this listing page (filtered).
-      if (route?.detailSelector && route.detailType) {
-        const links = extractDetailLinksFromHtml(
-          body.toString(),
-          route.detailSelector,
-          base,
+      if (route?.detailType && normalizedLinks.length > 0) {
+        await crawlerInstance.addRequests(
+          normalizedLinks.map((url) => ({ url, userData: { route } })),
         );
-        const allowed = filterUrls(links, route.urlFilters, defaultDomain);
-        if (allowed.length > 0) {
-          await crawlerInstance.addRequests(
-            allowed.map((url) => ({ url, userData: { route } })),
-          );
-        }
       }
     },
     },

@@ -27,7 +27,7 @@ export const SARAWAL_SITE: SiteConfig = {
       detailSelector: "li.node-readmore a",
       detailType: "noticeDetail",
       paginated: true,
-      maxPages: 40,
+      maxPages: 30,
       selectors: {
           "bodyField": "div.node div.content",
       },
