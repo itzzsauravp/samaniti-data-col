@@ -1,4 +1,4 @@
-import { load as cheerioLoad } from "cheerio";
+import { load as cheerioLoad, CheerioAPI } from "cheerio";
 
 /**
  * Scopes a full page HTML string down to the inner HTML of the first element
@@ -42,7 +42,7 @@ export function isListView(html: string): boolean {
 /**
  * Extracts the title from HTML, trying multiple selectors in order of preference.
  */
-export function extractTitle($: cheerio.CheerioAPI): string {
+export function extractTitle($: CheerioAPI): string {
     return (
         $('span[property="dc:title"]').attr("content")?.trim() ||
         $(".section-title").text().trim() ||
@@ -55,23 +55,39 @@ export function extractTitle($: cheerio.CheerioAPI): string {
 /**
  * Extracts PDF/document links from HTML.
  */
-export function extractDocumentLinks($: cheerio.CheerioAPI, baseUrl: string): string[] {
+export function extractDocumentLinks($: CheerioAPI, baseUrl: string): string[] {
+    const fileExtensions = ["pdf", "doc", "docx", "xls", "xlsx", "zip", "png", "jpg", "jpeg"];
+
+    const extensionSelectors = fileExtensions.flatMap((ext) => [
+        `a[href$='.${ext}']`,
+        `a[href*='.${ext}?']`,
+        `a[href*='.${ext}&']`,
+    ]);
+
     const selectors = [
         ".field-name-field-supporting-documents a",
         ".field-type-file a",
         ".file a",
-        "a[href$='.pdf']",
-        "a[href*='.pdf']",
+        ...extensionSelectors,
     ];
 
-    const links: string[] = [];
+    // Use a Set to automatically deduplicate URLs
+    const links = new Set<string>();
+
     for (const selector of selectors) {
         $(selector).each((_, el) => {
             const href = $(el).attr("href");
-            if (!href || href.startsWith("data:")) return;
-            const absolute = href.startsWith("http") ? href : `${baseUrl}${href}`;
-            links.push(absolute);
+            if (!href || href.startsWith("data:") || href.startsWith("javascript:")) return;
+
+            try {
+                // native URL constructor safely handles relative paths and slashes
+                const absoluteUrl = new URL(href, baseUrl).href;
+                links.add(absoluteUrl);
+            } catch {
+                // Ignore malformed or invalid URLs
+            }
         });
     }
-    return links;
+
+    return Array.from(links);
 }

@@ -13,6 +13,8 @@ import {
     extractTitle,
     extractDocumentLinks,
 } from "../../../core/utils/index.js";
+import { Cheerio } from "crawlee";
+import { getFileMetadata } from "../../../core/utils/file.js";
 
 export const MUNICIPALITY_CODE = "SAINAMAINA";
 
@@ -40,7 +42,7 @@ export async function buildDocument(
 
     return {
         fileName,
-        fileType: absoluteUrl.endsWith(".pdf") ? "application/pdf" : null,
+        fileType: getFileMetadata(fileName).mimeType,
         originalUrl: absoluteUrl,
         storagePath: null,
         downloadStatus: "pending",
@@ -104,7 +106,7 @@ async function transformProjectRow(
  */
 async function transformReportRow(
     $: cheerio.CheerioAPI,
-    row: cheerio.Cheerio,
+    row: cheerio.Cheerio<any>,
     baseUrl: string,
     category: string,
 ): Promise<ReportData> {
@@ -139,7 +141,7 @@ async function transformReportRow(
  */
 async function transformNoticeRow(
     $: cheerio.CheerioAPI,
-    row: cheerio.Cheerio,
+    row: cheerio.Cheerio<any>,
     baseUrl: string,
     category: string,
 ): Promise<NoticeData> {
