@@ -27,7 +27,11 @@ export const KSHIRESHWORNATH_SITE: SiteConfig = {
       detailSelector: "li.node-readmore a",
       detailType: "noticeDetail",
       paginated: true,
+      maxPages: 40,
       selectors: {
+          rows: ".region-content .views-row",
+          titleLink: ".node h2 a",
+          fileLink: ".field-name-field-documents a",
           "bodyField": "div.node div.content",
       },
     },

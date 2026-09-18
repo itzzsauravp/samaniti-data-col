@@ -176,7 +176,7 @@ export async function upsertNotice(data: NoticeData): Promise<void> {
     throw new Error(`Municipality with code '${municipalityCode}' not found.`);
   }
 
-  await prisma.notice.upsert({
+  const notice = await prisma.notice.upsert({
     where: { sourceUrl: noticeFields.sourceUrl },
     update: {
       titleNe: noticeFields.titleNe,
@@ -189,9 +189,30 @@ export async function upsertNotice(data: NoticeData): Promise<void> {
     create: {
       ...noticeFields,
       municipalityId: municipality.id,
-      documents: buildDocumentNestedQuery(documents),
     },
   });
+
+  if (documents && documents.length > 0) {
+    const existing = await prisma.document.findMany({
+      where: { noticeId: notice.id },
+      select: { originalUrl: true },
+    });
+    const existingUrls = new Set(existing.map((doc) => doc.originalUrl));
+    const toCreate = documents
+      .filter((doc) => !existingUrls.has(doc.originalUrl))
+      .map((doc) => ({
+        noticeId: notice.id,
+        fileName: doc.fileName,
+        fileType: doc.fileType,
+        originalUrl: doc.originalUrl,
+        storagePath: doc.storagePath,
+        downloadStatus: doc.downloadStatus ?? "pending",
+        downloadError: doc.downloadError ?? null,
+      }));
+    if (toCreate.length > 0) {
+      await prisma.document.createMany({ data: toCreate });
+    }
+  }
 }
 
 /**
