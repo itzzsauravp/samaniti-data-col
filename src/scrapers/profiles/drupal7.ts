@@ -54,11 +54,11 @@ export const drupal7: SelectorProfile = {
         ".field-name-field-supporting-documents a, .field-type-file a, .file a",
       bodyField: ".field-name-body .field-item",
       titleFallbacks: [
+        { selector: "span[property='dc:title']", attribute: "content" },
         { selector: "h3.section-title span" },
-        { selector: 'span[property="dc:title"]', attribute: "content" },
         { selector: "h1" },
       ],
-      titleUsesType: true,
+      titleUsesType: false,
       defaultRowTitle: "",
       defaultDetailTitle: "",
       fallbackWhen: "emptyRows",

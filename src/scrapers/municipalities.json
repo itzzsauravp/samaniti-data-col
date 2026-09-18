@@ -1,6 +1,126 @@
 {
   "municipalities": [
     {
+      "code": "BANGANGA",
+      "nameNe": "बाणगङ्गा नगरपालिका",
+      "nameEn": "Banganga Municipality",
+      "province": "Lumbini",
+      "district": "Kapilvastu",
+      "baseUrl": "https://bangangamun.gov.np",
+      "stack": "generic",
+      "config": "./configs/banganga.js",
+      "exportName": "BANGANGA_SITE",
+      "enabled": true
+    },
+    {
+      "code": "BARDAGHAT",
+      "nameNe": "बर्दघाट नगरपालिका",
+      "nameEn": "Bardaghat Municipality",
+      "province": "Lumbini",
+      "district": "Nawalparasi (Bardaghat Susta West)",
+      "baseUrl": "https://bardaghatmun.gov.np",
+      "stack": "drupal7",
+      "config": "./configs/bardaghat.js",
+      "exportName": "BARDAGHAT_SITE",
+      "enabled": true
+    },
+    {
+      "code": "DHANKAUL",
+      "nameNe": "धनकौल गाउँपालिका",
+      "nameEn": "Dhankaul Rural Municipality",
+      "province": "Madhesh",
+      "district": "Sarlahi",
+      "baseUrl": "https://dhankaulmun.gov.np",
+      "stack": "drupal7",
+      "config": "./configs/dhankaul.js",
+      "exportName": "DHANKAUL_SITE",
+      "enabled": true
+    },
+    {
+      "code": "DURGABHAGAWATI",
+      "nameNe": "दुर्गा भगवती गाउँपालिका",
+      "nameEn": "Durga Bhagwati Rural Municipality",
+      "province": "Madhesh",
+      "district": "Rautahat",
+      "baseUrl": "https://durgabhagawatimun.gov.np",
+      "stack": "drupal7",
+      "config": "./configs/durgabhagawati.js",
+      "exportName": "DURGABHAGAWATI_SITE",
+      "enabled": true
+    },
+    {
+      "code": "EKDARA",
+      "nameNe": "एकडारा गाउँपालिका",
+      "nameEn": "Ekdara Rural Municipality",
+      "province": "Madhesh",
+      "district": "Mahottari",
+      "baseUrl": "https://ekdaramun.gov.np",
+      "stack": "drupal7",
+      "config": "./configs/ekdara.js",
+      "exportName": "EKDARA_SITE",
+      "enabled": true
+    },
+    {
+      "code": "HARION",
+      "nameNe": "हरिवन नगरपालिका",
+      "nameEn": "Hariwan Municipality",
+      "province": "Madhesh",
+      "district": "Sarlahi",
+      "baseUrl": "https://harionmun.gov.np",
+      "stack": "generic",
+      "config": "./configs/harion.js",
+      "exportName": "HARION_SITE",
+      "enabled": true
+    },
+    {
+      "code": "KANCHAN",
+      "nameNe": "कञ्चन गाउँपालिका",
+      "nameEn": "Kanchan Rural Municipality",
+      "province": "Lumbini",
+      "district": "Rupandehi",
+      "baseUrl": "https://kanchanmun.gov.np",
+      "stack": "drupal7",
+      "config": "./configs/kanchan.js",
+      "exportName": "KANCHAN_SITE",
+      "enabled": true
+    },
+    {
+      "code": "KSHIRESHWORNATH",
+      "nameNe": "क्षिरेश्वरनाथ नगरपालिका",
+      "nameEn": "Kshireshwor Nath Municipality",
+      "province": "Madhesh",
+      "district": "Dhanusha",
+      "baseUrl": "https://kshireshwornathmun.gov.np",
+      "stack": "drupal7",
+      "config": "./configs/kshireshwornath.js",
+      "exportName": "KSHIRESHWORNATH_SITE",
+      "enabled": true
+    },
+    {
+      "code": "LAXMINIYA",
+      "nameNe": "लक्ष्मीनिया गाउँपालिका",
+      "nameEn": "Laxminiya Rural Municipality",
+      "province": "Madhesh",
+      "district": "Dhanusha",
+      "baseUrl": "https://laxminiyamun.gov.np",
+      "stack": "drupal7",
+      "config": "./configs/laxminiya.js",
+      "exportName": "LAXMINIYA_SITE",
+      "enabled": true
+    },
+    {
+      "code": "MANARASHISWA",
+      "nameNe": "मनराशिसवा नगरपालिका",
+      "nameEn": "Manarashiswa Municipality",
+      "province": "Madhesh",
+      "district": "Mahottari",
+      "baseUrl": "https://manarashiswamun.gov.np",
+      "stack": "drupal7",
+      "config": "./configs/manarashiswa.js",
+      "exportName": "MANARASHISWA_SITE",
+      "enabled": true
+    },
+    {
       "code": "SAINAMAINA",
       "nameNe": "सैनामैना नगरपालिका",
       "nameEn": "Sainamaina Municipality",
@@ -10,6 +130,30 @@
       "stack": "drupal7",
       "config": "./configs/sainamaina.js",
       "exportName": "SAINAMAINA_SITE",
+      "enabled": true
+    },
+    {
+      "code": "SARAWAL",
+      "nameNe": "सरावल गाउँपालिका",
+      "nameEn": "Sarawal Rural Municipality",
+      "province": "Lumbini",
+      "district": "Nawalparasi (Bardaghat Susta West)",
+      "baseUrl": "https://sarawalmun.gov.np",
+      "stack": "drupal7",
+      "config": "./configs/sarawal.js",
+      "exportName": "SARAWAL_SITE",
+      "enabled": true
+    },
+    {
+      "code": "SHUDDHODHAN",
+      "nameNe": "शुद्धोदन गाउँपालिका",
+      "nameEn": "Shuddhodhan Rural Municipality",
+      "province": "Lumbini",
+      "district": "Rupandehi",
+      "baseUrl": "https://shuddhodhanmunrupandehi.gov.np",
+      "stack": "drupal7",
+      "config": "./configs/shuddhodhan.js",
+      "exportName": "SHUDDHODHAN_SITE",
       "enabled": true
     }
   ]
