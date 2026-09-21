@@ -12,12 +12,13 @@ import {
  *
  * For each route:
  *   1. Fetches Page 1 (the root listing page).
- *   2. If `detailSelector` is set, queues detail-page links instead of pushing
- *      the listing page itself. The detail pages are then scoped + pushed.
+ *   2. If `detailSelector` is set, the listing HTML is first scoped by
+ *      `contentSelector` (if defined), then `detailSelector` extracts detail
+ *      links from within that scope. The detail pages are then scoped + pushed.
  *   3. If `paginated` is true, discovers all subsequent page URLs and processes
  *      each one through the same scoping/detail logic.
  *   4. If `detailSelector` is NOT set, the listing page itself is the content page
- *      and gets pushed directly to the results.
+ *      and gets pushed directly to the results (scoped by `contentSelector`).
  */
 export async function crawlRoutes(
     routes: RouteConfig[],
@@ -79,9 +80,18 @@ export async function crawlRoutes(
                         }
                     }
 
-                    // 2a. If detailSelector is defined → enqueue detail links, skip listing page
+                    // 2a. If detailSelector is defined → enqueue detail links, skip listing page.
+                    //     Scope the HTML by contentSelector first (if defined) so that
+                    //     detailSelector only needs to target elements *within* the container.
                     if (r.detailSelector) {
-                        const detailLinks = extractLinksFromHtml(fullHtml, r.detailSelector, base);
+                        const listingScope = r.contentSelector
+                            ? scopeHtml(fullHtml, r.contentSelector)
+                            : fullHtml;
+                        const detailLinks = extractLinksFromHtml(
+                            listingScope,
+                            r.detailSelector,
+                            base,
+                        );
                         console.log(
                             `[Crawler] Route "${r.type}" page ${pageNum}: found ${detailLinks.length} detail link(s).`,
                         );
