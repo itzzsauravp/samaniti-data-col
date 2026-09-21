@@ -2,13 +2,18 @@ import { RouteConfig } from "../contracts/scraper.interface.js";
 
 export interface StandardRouteOptions {
     baseUrl: string;
+    overrides?: Record<string, Partial<RouteConfig>>;
 }
 
 /**
- * Generates standard DRY route configurations for Nepali Drupal municipal portals.
+ * Generates standard DRY route configurations for Nepali Drupal municipal portals,
+ * supporting granular per-endpoint overrides for municipalities with differing settings.
  */
-export function createStandardMunicipalityRoutes({ baseUrl }: StandardRouteOptions): RouteConfig[] {
-    return [
+export function createStandardMunicipalityRoutes({
+    baseUrl,
+    overrides = {},
+}: StandardRouteOptions): RouteConfig[] {
+    const baseRoutes: RouteConfig[] = [
         // ── Projects (Tabular format: extracted directly from listing tables) ──
         {
             type: "project",
@@ -180,4 +185,13 @@ export function createStandardMunicipalityRoutes({ baseUrl }: StandardRouteOptio
             detailType: "notice",
         },
     ];
+
+    return baseRoutes.map((route) => {
+        const slug = route.live.split("/").pop() || "";
+        const override = overrides[slug] ?? {};
+        return {
+            ...route,
+            ...override,
+        };
+    });
 }
