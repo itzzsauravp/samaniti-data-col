@@ -1,0 +1,60 @@
+import "dotenv/config";
+import {
+    IMunicipalityScraper,
+    ScrapedPage,
+    ScraperConfig,
+} from "../../../core/contracts/scraper.interface.js";
+import { EtlPayload } from "../../../core/types/domain.js";
+import { extract, ROUTES } from "./extract.js";
+import { transform, MUNICIPALITY_CODE } from "./transform.js";
+import { load } from "./load.js";
+import { prisma } from "../../../core/db/loader.js";
+
+export class SarawalScraper implements IMunicipalityScraper {
+    public municipalityCode = MUNICIPALITY_CODE;
+    public routes = ROUTES;
+
+    async extract(config?: ScraperConfig): Promise<ScrapedPage[]> {
+        return extract(config);
+    }
+
+    async transform(pages: ScrapedPage[]): Promise<EtlPayload> {
+        return transform(pages);
+    }
+
+    async load(data: EtlPayload): Promise<void> {
+        return load(data);
+    }
+
+    async run(config?: ScraperConfig): Promise<void> {
+        console.log(`[SarawalScraper] Starting ETL run for '${this.municipalityCode}'`);
+
+        const pages = await this.extract(config);
+        console.log(
+            `[SarawalScraper] Extracted ${pages.length} page(s). Processing incrementally...`,
+        );
+
+        for (const page of pages) {
+            try {
+                const partialData = await this.transform([page]);
+                await this.load(partialData);
+            } catch (err) {
+                console.error(`[SarawalScraper] Error processing page ${page.url}:`, err);
+            }
+        }
+        console.log(`[SarawalScraper] ETL run completed successfully.`);
+    }
+}
+
+// Run directly: npm run scraper:sarawal
+(async () => {
+    const scraper = new SarawalScraper();
+    try {
+        await scraper.run();
+    } catch (err) {
+        console.error("[SarawalScraper] Fatal error:", err);
+        process.exit(1);
+    } finally {
+        await prisma.$disconnect();
+    }
+})();

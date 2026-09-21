@@ -15,17 +15,16 @@ import {
     buildDocument,
     extractDate,
 } from "../../../core/utils/index.js";
-import { unwatchFile } from "node:fs";
 import { executeTransform } from "../../../core/constants/transformers.js";
 
-export const MUNICIPALITY_CODE = "KANCHAN";
+export const MUNICIPALITY_CODE = "SARAWAL";
 
 export const MUNICIPALITY_METADATA: MunicipalityData = {
     code: MUNICIPALITY_CODE,
-    nameNe: "कञ्चन गाउँपालिका",
-    nameEn: "Kanchan Rural Municipality",
+    nameNe: "सरावल गाउँपालिका",
+    nameEn: "Sarawal Rural Municipality",
     province: "Lumbini",
-    district: "Rupandehi",
+    district: "Nawalparasi",
 };
 
 // ---------------------------------------------------------------------------
@@ -100,7 +99,7 @@ async function transformProjectRow(
  */
 async function transformReportRow(
     $: cheerio.CheerioAPI,
-    row: cheerio.Cheerio<any>,
+    row: cheerio.Cheerio<cheerio.Element>,
     baseUrl: string,
     category: string,
 ): Promise<ReportData> {
@@ -152,38 +151,41 @@ async function transformNoticeRow(
     baseUrl: string,
     category: string,
 ): Promise<NoticeData> {
-    const titleEl = row.find("h2 a");
-    const dateEl = row.find('.meta.submitted span[property="dc:date dc:created"]');
-    const docEl = row.find(".field-name-field-documents a");
+    const titleAnchor = row.find(".views-field-title a, h2 a").first();
+    const titleNe = titleAnchor.text().trim().replace(/\s+/g, " ") || "";
+    const rawHref = titleAnchor.attr("href") || "";
 
-    const titleNe = titleEl.text().trim() || "";
-    const rawLink = titleEl.attr("href") || "";
-    const sourceUrl = rawLink
-        ? rawLink.startsWith("http")
-            ? rawLink
-            : `${baseUrl}${rawLink}`
-        : "";
-
-    const publishedDate = dateEl.attr("content") || dateEl.text().trim() || null;
-
-    const documents: DocumentData[] = [];
-    const docHref = docEl.attr("href");
-    if (docHref) {
-        const fullDocUrl = docHref.startsWith("http") ? docHref : `${baseUrl}${docHref}`;
-        documents.push(
-            await buildDocument(fullDocUrl, baseUrl, docEl.text().trim() || titleNe, publishedDate),
-        );
+    let sourceUrl = "";
+    if (rawHref) {
+        try {
+            sourceUrl = decodeURIComponent(new URL(rawHref, baseUrl).href);
+        } catch {
+            sourceUrl = rawHref;
+        }
     }
+
+    // 2. Fiscal Year Extraction
+    const fiscalYearAnchor = row.find(".views-field-field-fiscal-year a");
+    const fiscalYearCellText = fiscalYearAnchor.text().trim();
+    const fiscalYear = fiscalYearCellText || parseNepaliFiscalYear(titleNe) || null;
+
+    // 3. Additional Metadata (Creation Date, Fiscal Year Link)
+    const createdTd = row.find(".views-field-created");
+    const dateCreated = createdTd.text().trim() || null;
+
+    // 4. File attachments scoped strictly to this row
+    const documents: DocumentData[] = extractDocumentLinks($, baseUrl, row);
+
+    console.log(titleAnchor, titleNe, sourceUrl, documents);
 
     return {
         municipalityCode: MUNICIPALITY_CODE,
         titleNe,
         titleEn: null,
-        contentNe: null,
-        type: category,
-        publishedDate,
-        sourceUrl: decodeURIComponent(sourceUrl),
+        type: category || null,
+        sourceUrl,
         documents,
+        publishedDate: dateCreated,
     };
 }
 
@@ -222,14 +224,15 @@ async function transformProjectDetail(page: ScrapedPage): Promise<Partial<EtlPay
 }
 
 /**
- * Transforms a report detail page. (NOT USED)
+ * Transforms a report detail page.
  */
 async function transformReportDetail(page: ScrapedPage): Promise<Partial<EtlPayload>> {
     const $ = cheerio.load(page.html);
     const baseUrl = new URL(page.url).origin;
 
     const titleNe = extractTitle($);
-    const documents = extractDocumentLinks($, baseUrl);
+    const publishedDate = extractDate($);
+    const documents = extractDocumentLinks($, baseUrl, $(".content .field-item"));
 
     return {
         reports: [
@@ -239,7 +242,7 @@ async function transformReportDetail(page: ScrapedPage): Promise<Partial<EtlPayl
                 titleEn: null,
                 type: page.category,
                 fiscalYear: parseNepaliFiscalYear(titleNe) || null,
-                publishedDate: null,
+                publishedDate,
                 sourceUrl: decodeURIComponent(page.url),
                 documents,
             },
@@ -253,7 +256,7 @@ async function transformReportDetail(page: ScrapedPage): Promise<Partial<EtlPayl
 async function transformNoticeDetail(page: ScrapedPage): Promise<Partial<EtlPayload>> {
     const $ = cheerio.load(page.html);
     const titleNe = extractTitle($);
-    const publishedDate = extractDate($);
+    const publishedDate = $(".meta.submitted span").attr("content") || null;
 
     if (page.category === "news_notices") {
         const documents = extractDocumentLinks(
@@ -336,7 +339,7 @@ async function transformReportListing(page: ScrapedPage): Promise<Partial<EtlPay
 async function transformNoticeListing(page: ScrapedPage): Promise<Partial<EtlPayload>> {
     const $ = cheerio.load(page.html);
     const baseUrl = new URL(page.url).origin;
-    const rows = $(".views-row").toArray();
+    const rows = $(".view-content table tbody tr").toArray();
 
     const notices = await Promise.all(
         rows.map((row) => transformNoticeRow($, $(row), baseUrl, page.category || "")),

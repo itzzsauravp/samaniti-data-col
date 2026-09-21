@@ -55,6 +55,27 @@ export function extractTitle($: CheerioAPI): string {
 }
 
 /**
+ * Extracts the submission or creation date from HTML, trying multiple selectors in order of preference.
+ */
+export function extractDate($: CheerioAPI): string {
+    return (
+        // ISO timestamp from the content attribute of the meta/span tag
+        $('span[property="dc:date dc:created"]').attr("content")?.trim() ||
+        $('meta[property="dc:date"]').attr("content")?.trim() ||
+        $('meta[property="article:published_time"]').attr("content")?.trim() ||
+        // Formatted human-readable date text inside the submitted div or date element
+        $(".submitted span[property*='dc:date']").text().trim() ||
+        $(".meta.submitted")
+            .text()
+            .replace(/^Submitted on:\s*/i, "")
+            .trim() ||
+        $("time").attr("datetime")?.trim() ||
+        $("time").text().trim() ||
+        ""
+    );
+}
+
+/**
  * Extracts PDF/document links from HTML.
  */
 export function extractDocumentLinks(
@@ -136,6 +157,67 @@ export function extractDocumentLinks(
             }
         });
     }
+
+    // Process iframe embeds (e.g. Google Docs Viewer or direct iframe sources)
+    const iframeSelector = formattedClass ? `iframe[src]${formattedClass}` : "iframe[src]";
+
+    container.find(iframeSelector).each((_: number, el: any) => {
+        const $el = $(el);
+        const src = $el.attr("src");
+
+        if (!src || src.startsWith("data:") || src.startsWith("javascript:")) return;
+
+        let targetHref = src;
+
+        // Decode nested document URL if embedded inside Google Docs Viewer
+        if (src.includes("docs.google.com/viewer")) {
+            const match = src.match(/[?&]url=([^&]+)/);
+            if (match) {
+                targetHref = decodeURIComponent(match[1]);
+            }
+        }
+
+        // Check if extracted href matches the user-provided regex pattern
+        if (pattern && !pattern.test(targetHref)) return;
+
+        try {
+            // Support protocol-relative URLs (e.g., //docs.google.com/...)
+            const rawUrl = targetHref.startsWith("//") ? `https:${targetHref}` : targetHref;
+            const absoluteUrl = new URL(rawUrl, baseUrl).href;
+
+            if (documentsMap.has(absoluteUrl)) return;
+
+            const urlPath = new URL(absoluteUrl).pathname;
+            const ext = path.extname(urlPath).replace(".", "").toLowerCase();
+
+            // Verify if the extracted link matches known document/image extensions
+            if (
+                !fileExtensions.includes(ext) &&
+                !fileExtensions.some((e) => targetHref.toLowerCase().includes(`.${e}`))
+            ) {
+                return;
+            }
+
+            const titleAttr = $el.attr("title");
+            const idAttr = $el.attr("id");
+            const iframeTitle = titleAttr ? titleAttr.trim() : idAttr ? idAttr.trim() : "";
+
+            const fallbackName = path.basename(urlPath) || "document";
+            const fileName = iframeTitle.length > 0 ? iframeTitle : fallbackName;
+            const fileType = ext || null;
+
+            documentsMap.set(absoluteUrl, {
+                fileName,
+                fileType,
+                originalUrl: absoluteUrl,
+                storagePath: null,
+                downloadStatus: "skipped",
+                downloadError: null,
+            });
+        } catch {
+            // Ignore malformed URLs
+        }
+    });
 
     return Array.from(documentsMap.values());
 }
