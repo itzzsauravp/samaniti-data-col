@@ -29,6 +29,11 @@ export class KanchanScraper implements IMunicipalityScraper {
     async run(config?: ScraperConfig): Promise<void> {
         console.log(`[KanchanScraper] Starting ETL run for '${this.municipalityCode}'`);
 
+        const runId = await startScraperRun(this.municipalityCode, "Lumbini", MUNICIPALITY_METADATA);
+        let projectsCount = 0;
+        let reportsCount = 0;
+        let noticesCount = 0;
+
         const pages = await this.extract(config);
         console.log(
             `[KanchanScraper] Extracted ${pages.length} page(s). Processing incrementally...`,
@@ -37,16 +42,23 @@ export class KanchanScraper implements IMunicipalityScraper {
         for (const page of pages) {
             try {
                 const partialData = await this.transform([page]);
-                await this.load(partialData);
+                await this.load({ ...partialData, runId });
+
+                projectsCount += partialData.projects?.length ?? 0;
+                reportsCount += partialData.reports?.length ?? 0;
+                noticesCount += partialData.notices?.length ?? 0;
             } catch (err) {
                 console.error(`[KanchanScraper] Error processing page ${page.url}:`, err);
             }
         }
+        await finishScraperRun(runId, { projectsCount, reportsCount, noticesCount });
         console.log(`[KanchanScraper] ETL run completed successfully.`);
     }
 }
 
 // Run directly: npm run scraper:kanchan
+import { startScraperRun, finishScraperRun } from "../../../core/db/loader.js";
+import { MUNICIPALITY_METADATA } from "./transform.js";
 (async () => {
     const scraper = new KanchanScraper();
     try {

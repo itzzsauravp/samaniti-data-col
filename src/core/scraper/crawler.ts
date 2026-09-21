@@ -79,8 +79,8 @@ export async function crawlRoutes(
                         }
                     }
 
-                    // 2a. If detailSelector is defined → enqueue detail links, skip listing page
-                    if (r.detailSelector) {
+                    // 2a. If detailSelector is defined AND format is not tabular → enqueue detail links, skip listing page
+                    if (r.format !== "tabular" && r.detailSelector) {
                         const detailLinks = extractLinksFromHtml(fullHtml, r.detailSelector, base);
                         console.log(
                             `[Crawler] Route "${r.type}" page ${pageNum}: found ${detailLinks.length} detail link(s).`,

@@ -6,7 +6,7 @@ import {
 } from "../../../core/contracts/scraper.interface.js";
 import { EtlPayload } from "../../../core/types/domain.js";
 import { extract, ROUTES } from "./extract.js";
-import { transform, MUNICIPALITY_CODE } from "./transform.js";
+import { transform, MUNICIPALITY_CODE, MUNICIPALITY_METADATA } from "./transform.js";
 import { load } from "./load.js";
 import { prisma } from "../../../core/db/loader.js";
 
@@ -29,6 +29,11 @@ export class SarawalScraper implements IMunicipalityScraper {
     async run(config?: ScraperConfig): Promise<void> {
         console.log(`[SarawalScraper] Starting ETL run for '${this.municipalityCode}'`);
 
+        const runId = await startScraperRun(this.municipalityCode, "Lumbini", MUNICIPALITY_METADATA);
+        let projectsCount = 0;
+        let reportsCount = 0;
+        let noticesCount = 0;
+
         const pages = await this.extract(config);
         console.log(
             `[SarawalScraper] Extracted ${pages.length} page(s). Processing incrementally...`,
@@ -37,16 +42,22 @@ export class SarawalScraper implements IMunicipalityScraper {
         for (const page of pages) {
             try {
                 const partialData = await this.transform([page]);
-                await this.load(partialData);
+                await this.load({ ...partialData, runId });
+
+                projectsCount += partialData.projects?.length ?? 0;
+                reportsCount += partialData.reports?.length ?? 0;
+                noticesCount += partialData.notices?.length ?? 0;
             } catch (err) {
                 console.error(`[SarawalScraper] Error processing page ${page.url}:`, err);
             }
         }
+        await finishScraperRun(runId, { projectsCount, reportsCount, noticesCount });
         console.log(`[SarawalScraper] ETL run completed successfully.`);
     }
 }
 
 // Run directly: npm run scraper:sarawal
+import { startScraperRun, finishScraperRun } from "../../../core/db/loader.js";
 (async () => {
     const scraper = new SarawalScraper();
     try {

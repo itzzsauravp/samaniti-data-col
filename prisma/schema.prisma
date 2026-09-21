@@ -19,8 +19,30 @@ model Municipality {
   notices   Notice[]
   projects  Project[]
   reports   Report[]
+  scraperRuns ScraperRun[]
 
   @@map("municipalities")
+}
+
+model ScraperRun {
+  id               String       @id @default(uuid())
+  municipalityCode String       @map("municipality_code")
+  province         String
+  status           String       @default("running")
+  startedAt        DateTime     @default(now()) @map("started_at")
+  endedAt          DateTime?    @map("ended_at")
+  totalScraped     Int          @default(0) @map("total_scraped")
+  projectsCount    Int          @default(0) @map("projects_count")
+  reportsCount     Int          @default(0) @map("reports_count")
+  noticesCount     Int          @default(0) @map("notices_count")
+  errorLog         String?      @map("error_log")
+  municipalityId   String       @map("municipality_id")
+  municipality     Municipality @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+  projects         Project[]
+  reports          Report[]
+  notices          Notice[]
+
+  @@map("scraper_runs")
 }
 
 model MunicipalityProfile {
@@ -58,6 +80,8 @@ model Project {
   metadata       Json?        @map("metadata")
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
+  runId          String?      @map("run_id")
+  scraperRun     ScraperRun?  @relation(fields: [runId], references: [id])
   documents      Document[]
   municipality   Municipality @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
 
@@ -76,6 +100,8 @@ model Report {
   metadata       Json?        @map("metadata")
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
+  runId          String?      @map("run_id")
+  scraperRun     ScraperRun?  @relation(fields: [runId], references: [id])
   documents      Document[]
   municipality   Municipality @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
 
@@ -94,6 +120,8 @@ model Notice {
   metadata       Json?        @map("metadata")
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
+  runId          String?      @map("run_id")
+  scraperRun     ScraperRun?  @relation(fields: [runId], references: [id])
   documents      Document[]
   municipality   Municipality @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
 
