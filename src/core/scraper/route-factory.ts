@@ -3,15 +3,20 @@ import { RouteConfig } from "../contracts/scraper.interface.js";
 export interface StandardRouteOptions {
     baseUrl: string;
     overrides?: Record<string, Partial<RouteConfig>>;
+    exclude?: string[]; // Slugs of standard routes to omit entirely (saves resources)
+    additionalRoutes?: RouteConfig[]; // New custom routes specific to this municipality
 }
 
 /**
- * Generates standard DRY route configurations for Nepali Drupal municipal portals,
- * supporting granular per-endpoint overrides for municipalities with differing settings.
+ * Generates DRY route configurations for Nepali Drupal municipal portals,
+ * supporting granular per-endpoint overrides, resource exclusion (disabling unused routes),
+ * and appending custom municipality-specific routes.
  */
 export function createStandardMunicipalityRoutes({
     baseUrl,
     overrides = {},
+    exclude = [],
+    additionalRoutes = [],
 }: StandardRouteOptions): RouteConfig[] {
     const baseRoutes: RouteConfig[] = [
         // ── Projects (Tabular format: extracted directly from listing tables) ──
@@ -186,7 +191,14 @@ export function createStandardMunicipalityRoutes({
         },
     ];
 
-    return baseRoutes.map((route) => {
+    // 1. Filter out excluded (disabled) routes to save resources
+    const filteredRoutes = baseRoutes.filter((route) => {
+        const slug = route.live.split("/").pop() || "";
+        return !exclude.includes(slug);
+    });
+
+    // 2. Apply overrides and append additional custom routes
+    const processedRoutes = filteredRoutes.map((route) => {
         const slug = route.live.split("/").pop() || "";
         const override = overrides[slug] ?? {};
         return {
@@ -194,4 +206,6 @@ export function createStandardMunicipalityRoutes({
             ...override,
         };
     });
+
+    return [...processedRoutes, ...additionalRoutes];
 }
