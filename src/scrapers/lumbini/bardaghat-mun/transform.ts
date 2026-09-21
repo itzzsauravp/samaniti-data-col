@@ -12,17 +12,16 @@ import {
     parseNepaliFiscalYear,
     extractTitle,
     extractDocumentLinks,
-    buildDocument,
     extractDate,
 } from "../../../core/utils/index.js";
 import { executeTransform } from "../../../core/constants/transformers.js";
 
-export const MUNICIPALITY_CODE = "SARAWAL";
+export const MUNICIPALITY_CODE = "BARDAGHAT";
 
 export const MUNICIPALITY_METADATA: MunicipalityData = {
     code: MUNICIPALITY_CODE,
-    nameNe: "सरावल गाउँपालिका",
-    nameEn: "Sarawal Rural Municipality",
+    nameNe: "बर्दघाट नगरपालिका",
+    nameEn: "Bardaghat Municipality",
     province: "Lumbini",
     district: "Nawalparasi",
 };
@@ -103,7 +102,6 @@ async function transformReportRow(
     baseUrl: string,
     category: string,
 ): Promise<ReportData> {
-    // 1. Title and Detail Source URL Extraction
     const titleAnchor = row.find(".views-field-title a, h2 a").first();
     const titleNe = titleAnchor.text().trim().replace(/\s+/g, " ") || "";
     const rawHref = titleAnchor.attr("href") || "";
@@ -117,16 +115,19 @@ async function transformReportRow(
         }
     }
 
-    // 2. Fiscal Year Extraction
     const fiscalYearAnchor = row.find(".views-field-field-fiscal-year a");
     const fiscalYearCellText = fiscalYearAnchor.text().trim();
     const fiscalYear = fiscalYearCellText || parseNepaliFiscalYear(titleNe) || null;
 
-    // 3. Additional Metadata (Creation Date, Fiscal Year Link)
-    const createdTd = row.find(".views-field-created");
-    const dateCreated = createdTd.text().trim() || null;
+    const dateCreatedRaw =
+        row.find(".views-field-created .field-content").text().trim() ||
+        row
+            .find(".views-field-created")
+            .text()
+            .replace(/^Post date\s*/i, "")
+            .trim();
+    const dateCreated = dateCreatedRaw || null;
 
-    // 4. File attachments scoped strictly to this row
     const documents: DocumentData[] = extractDocumentLinks($, baseUrl, row);
 
     return {
@@ -176,6 +177,8 @@ async function transformNoticeRow(
     // 4. File attachments scoped strictly to this row
     const documents: DocumentData[] = extractDocumentLinks($, baseUrl, row);
 
+    console.log("Documents:", documents);
+
     return {
         municipalityCode: MUNICIPALITY_CODE,
         titleNe,
@@ -192,9 +195,10 @@ async function transformNoticeRow(
 // ---------------------------------------------------------------------------
 
 /**
- * Transforms a project detail page. (NOT USED)
+ * Transforms a project detail page.
  */
 async function transformProjectDetail(page: ScrapedPage): Promise<Partial<EtlPayload>> {
+    console.log("Is this running??");
     const $ = cheerio.load(page.html);
     const baseUrl = new URL(page.url).origin;
 
@@ -322,7 +326,7 @@ async function transformProjectListing(page: ScrapedPage): Promise<Partial<EtlPa
 async function transformReportListing(page: ScrapedPage): Promise<Partial<EtlPayload>> {
     const $ = cheerio.load(page.html);
     const baseUrl = new URL(page.url).origin;
-    const rows = $(".view-content table tbody tr").toArray();
+    const rows = $(".view-content .views-row").toArray();
 
     console.log(`[Project Listing] ${rows.length} row(s) found on ${page.url}`);
 
@@ -333,7 +337,6 @@ async function transformReportListing(page: ScrapedPage): Promise<Partial<EtlPay
     return { reports };
 }
 
-// NOT USED
 async function transformNoticeListing(page: ScrapedPage): Promise<Partial<EtlPayload>> {
     const $ = cheerio.load(page.html);
     const baseUrl = new URL(page.url).origin;

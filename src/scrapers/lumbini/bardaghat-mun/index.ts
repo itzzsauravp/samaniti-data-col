@@ -10,7 +10,7 @@ import { transform, MUNICIPALITY_CODE } from "./transform.js";
 import { load } from "./load.js";
 import { prisma } from "../../../core/db/loader.js";
 
-export class SarawalScraper implements IMunicipalityScraper {
+export class BardaghatScraper implements IMunicipalityScraper {
     public municipalityCode = MUNICIPALITY_CODE;
     public routes = ROUTES;
 
@@ -27,11 +27,11 @@ export class SarawalScraper implements IMunicipalityScraper {
     }
 
     async run(config?: ScraperConfig): Promise<void> {
-        console.log(`[SarawalScraper] Starting ETL run for '${this.municipalityCode}'`);
+        console.log(`[BardaghatScraper] Starting ETL run for '${this.municipalityCode}'`);
 
         const pages = await this.extract(config);
         console.log(
-            `[SarawalScraper] Extracted ${pages.length} page(s). Processing incrementally...`,
+            `[BardaghatScraper] Extracted ${pages.length} page(s). Processing incrementally...`,
         );
 
         for (const page of pages) {
@@ -39,20 +39,20 @@ export class SarawalScraper implements IMunicipalityScraper {
                 const partialData = await this.transform([page]);
                 await this.load(partialData);
             } catch (err) {
-                console.error(`[SarawalScraper] Error processing page ${page.url}:`, err);
+                console.error(`[BardaghatScraper] Error processing page ${page.url}:`, err);
             }
         }
-        console.log(`[SarawalScraper] ETL run completed successfully.`);
+        console.log(`[BardaghatScraper] ETL run completed successfully.`);
     }
 }
 
-// Run directly: npm run scraper lumbini:sarawal
+// Run directly: npm run scraper lumbini:bardaghat
 (async () => {
-    const scraper = new SarawalScraper();
+    const scraper = new BardaghatScraper();
     try {
         await scraper.run();
     } catch (err) {
-        console.error("[SarawalScraper] Fatal error:", err);
+        console.error("[BardaghatScraper] Fatal error:", err);
         process.exit(1);
     } finally {
         await prisma.$disconnect();

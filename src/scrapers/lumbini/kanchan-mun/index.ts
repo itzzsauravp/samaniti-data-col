@@ -46,7 +46,7 @@ export class KanchanScraper implements IMunicipalityScraper {
     }
 }
 
-// Run directly: npm run scraper:kanchan
+// Run directly: npm run scraper lumbini:kanchan
 (async () => {
     const scraper = new KanchanScraper();
     try {

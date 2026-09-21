@@ -46,7 +46,7 @@ export class SainamainaScraper implements IMunicipalityScraper {
     }
 }
 
-// Run directly: npm run scraper:sainamaina
+// Run directly: npm run scraper lumbini:sainamaina
 (async () => {
     const scraper = new SainamainaScraper();
     try {

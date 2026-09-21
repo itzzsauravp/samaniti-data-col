@@ -81,141 +81,148 @@ export function extractDate($: CheerioAPI): string {
 export function extractDocumentLinks(
     $: CheerioAPI,
     baseUrl: string,
-    $context?: Cheerio<Element>,
-    hrefPattern?: RegExp | string,
-    extraClass?: string,
+    $context: Cheerio<Element>,
+    hrefPattern?: RegExp,
 ): DocumentData[] {
-    const fileExtensions = ["pdf", "doc", "docx", "xls", "xlsx", "zip", "png", "jpg", "jpeg"];
-
-    const extensionSelectors = fileExtensions.flatMap((ext) => [
-        `a[href$='.${ext}']`,
-        `a[href*='.${ext}?']`,
-        `a[href*='.${ext}&']`,
-    ]);
-
-    const baseSelectors = [
-        ".field-name-field-supporting-documents a",
-        ".field-type-file a",
-        ".file a",
-        ...extensionSelectors,
-    ];
-
-    // Format extra class/selector (ensures leading dot if passed as "my-class")
-    const formattedClass = extraClass
-        ? extraClass.trim().startsWith(".")
-            ? extraClass.trim()
-            : `.${extraClass.trim()}`
-        : "";
-
-    // Append extra class/selector to each base selector if provided
-    const selectors = formattedClass
-        ? baseSelectors.map((sel) => `${sel}${formattedClass}`)
-        : baseSelectors;
-
-    const container = $context ?? $.root();
     const documentsMap = new Map<string, DocumentData>();
 
-    // Normalize pattern to RegExp if a string is provided
-    const pattern = typeof hrefPattern === "string" ? new RegExp(hrefPattern) : hrefPattern;
-
-    for (const selector of selectors) {
-        container.find(selector).each((_: number, el: any) => {
-            const $el = $(el);
-            const href = $el.attr("href");
-
-            if (!href || href.startsWith("data:") || href.startsWith("javascript:")) return;
-
-            // Check if href matches the user-provided regex pattern
-            if (pattern && !pattern.test(href)) return;
-
-            try {
-                const absoluteUrl = new URL(href, baseUrl).href;
-
-                // Skip if we already processed this exact URL in the current scope
-                if (documentsMap.has(absoluteUrl)) return;
-
-                // Extract filename from anchor text or fallback to URL pathname
-                const urlPath = new URL(absoluteUrl).pathname;
-                const linkText = $el.text().trim();
-                const fallbackName = path.basename(urlPath) || "document";
-                const fileName = linkText.length > 0 ? linkText : fallbackName;
-
-                // Extract extension/fileType if available
-                const ext = path.extname(urlPath).replace(".", "").toLowerCase();
-                const fileType = ext || null;
-
-                documentsMap.set(absoluteUrl, {
-                    fileName,
-                    fileType,
-                    originalUrl: absoluteUrl,
-                    storagePath: null,
-                    downloadStatus: "skipped",
-                    downloadError: null,
-                });
-            } catch {
-                // Ignore malformed URLs
-            }
-        });
-    }
-
-    // Process iframe embeds (e.g. Google Docs Viewer or direct iframe sources)
-    const iframeSelector = formattedClass ? `iframe[src]${formattedClass}` : "iframe[src]";
-
-    container.find(iframeSelector).each((_: number, el: any) => {
-        const $el = $(el);
-        const src = $el.attr("src");
-
-        if (!src || src.startsWith("data:") || src.startsWith("javascript:")) return;
-
-        let targetHref = src;
-
-        // Decode nested document URL if embedded inside Google Docs Viewer
-        if (src.includes("docs.google.com/viewer")) {
-            const match = src.match(/[?&]url=([^&]+)/);
-            if (match) {
-                targetHref = decodeURIComponent(match[1]);
+    // Helper to safely get the first non-empty string from a list of candidates
+    const getFirstNonEmptyString = (...candidates: (string | undefined | null)[]): string => {
+        for (const item of candidates) {
+            if (item && typeof item === "string") {
+                const trimmed = item.trim();
+                if (trimmed.length > 0) {
+                    return trimmed;
+                }
             }
         }
+        return "";
+    };
 
-        // Check if extracted href matches the user-provided regex pattern
-        if (pattern && !pattern.test(targetHref)) return;
-
+    // Helper to normalize relative URLs to absolute URLs
+    const toAbsoluteUrl = (url: string): string => {
         try {
-            // Support protocol-relative URLs (e.g., //docs.google.com/...)
-            const rawUrl = targetHref.startsWith("//") ? `https:${targetHref}` : targetHref;
-            const absoluteUrl = new URL(rawUrl, baseUrl).href;
+            return new URL(url, baseUrl).href;
+        } catch {
+            return url;
+        }
+    };
 
-            if (documentsMap.has(absoluteUrl)) return;
+    // Helper to extract clean file extensions (ignoring query parameters)
+    const getExtension = (url: string): string => {
+        const cleanUrl = url.split("?")[0];
+        const parts = cleanUrl.split(".");
+        return parts.length > 1 ? parts.pop()!.toLowerCase() : "";
+    };
 
-            const urlPath = new URL(absoluteUrl).pathname;
-            const ext = path.extname(urlPath).replace(".", "").toLowerCase();
+    // 1. EXTRACT FROM ANCHOR TAGS (PDFs, DOCs, Zip, direct file links)
+    $context.find("a[href]").each((_, el) => {
+        const $a = $(el);
+        const rawHref = $a.attr("href");
 
-            // Verify if the extracted link matches known document/image extensions
-            if (
-                !fileExtensions.includes(ext) &&
-                !fileExtensions.some((e) => targetHref.toLowerCase().includes(`.${e}`))
-            ) {
-                return;
-            }
+        if (!rawHref) return;
+        const trimmedHref = rawHref.trim();
+        if (!trimmedHref || trimmedHref.startsWith("javascript:") || trimmedHref.startsWith("#")) {
+            return;
+        }
 
-            const titleAttr = $el.attr("title");
-            const idAttr = $el.attr("id");
-            const iframeTitle = titleAttr ? titleAttr.trim() : idAttr ? idAttr.trim() : "";
+        const absoluteUrl = toAbsoluteUrl(trimmedHref);
 
-            const fallbackName = path.basename(urlPath) || "document";
-            const fileName = iframeTitle.length > 0 ? iframeTitle : fallbackName;
-            const fileType = ext || null;
+        // Filter by pattern if provided
+        if (hrefPattern && !hrefPattern.test(absoluteUrl)) {
+            return;
+        }
+
+        const ext = getExtension(absoluteUrl);
+
+        // Check if link matches common document/media extensions or Drupal file wrapper classes
+        const isDocExtension = [
+            "pdf",
+            "doc",
+            "docx",
+            "xls",
+            "xlsx",
+            "ppt",
+            "pptx",
+            "zip",
+            "csv",
+            "jpg",
+            "jpeg",
+            "png",
+            "gif",
+        ].includes(ext);
+        const isFileContainer =
+            $a.closest(".file, .field-type-file, .field-name-field-supporting-documents").length >
+            0;
+
+        if (isDocExtension || isFileContainer) {
+            const anchorText = $a.text();
+            const titleAttr = $a.attr("title");
+
+            const fileName = getFirstNonEmptyString(anchorText, titleAttr, "Untitled Document");
 
             documentsMap.set(absoluteUrl, {
                 fileName,
-                fileType,
+                fileType: ext || "unknown",
                 originalUrl: absoluteUrl,
                 storagePath: null,
                 downloadStatus: "skipped",
                 downloadError: null,
             });
-        } catch {
-            // Ignore malformed URLs
+        }
+    });
+
+    // 2. EXTRACT FROM IMAGE TAGS (Handles Drupal thumbnail/image fields)
+    $context.find("img[src]").each((_, el) => {
+        const $img = $(el);
+        const rawSrc = $img.attr("src");
+
+        if (!rawSrc) return;
+        const trimmedSrc = rawSrc.trim();
+        if (!trimmedSrc) return;
+
+        // Skip Drupal default UI/file icons (e.g., application-pdf.png)
+        if (trimmedSrc.includes("/modules/file/icons/") || trimmedSrc.includes("/misc/icons/")) {
+            return;
+        }
+
+        const absoluteUrl = toAbsoluteUrl(trimmedSrc);
+
+        // Filter by pattern if provided
+        if (hrefPattern && !hrefPattern.test(absoluteUrl)) {
+            return;
+        }
+
+        const ext = getExtension(absoluteUrl);
+        const isImageExtension = ["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext);
+
+        if (isImageExtension) {
+            const altText = $img.attr("alt");
+            const titleText = $img.attr("title");
+            const parentLinkText = $img.closest("a").text();
+            const rowTitleText = $context.find(".views-field-title").text();
+
+            const fileName = getFirstNonEmptyString(
+                altText,
+                titleText,
+                parentLinkText,
+                rowTitleText,
+                `Image_${Date.now()}.${ext}`,
+            );
+
+            // Use the clean URL (without query params like ?itok=) as the map key to prevent duplicate entries
+            const cleanUrl = absoluteUrl.split("?")[0];
+
+            if (!documentsMap.has(cleanUrl)) {
+                documentsMap.set(cleanUrl, {
+                    fileName,
+                    fileType: ext,
+                    originalUrl: absoluteUrl,
+                    storagePath: null,
+                    downloadStatus: "skipped",
+                    downloadError: null,
+                });
+            }
         }
     });
 
