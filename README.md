@@ -2,6 +2,8 @@
 
 TypeScript web scraping and ETL pipeline monorepo designed to extract, transform, and load (ETL) public local government portal data (municipalities, profiles, projects, reports, notices) across Nepal.
 
+> New here? Read **[docs/scraping-process.md](docs/scraping-process.md)** for a step-by-step walkthrough of how the scraping pipeline works.
+
 ---
 
 ## Tech Stack
