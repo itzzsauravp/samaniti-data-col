@@ -1,6 +1,5 @@
 import { load as cheerioLoad, CheerioAPI, Cheerio, Element } from "cheerio";
 import { DocumentData } from "../types/domain.js";
-import path from "node:path";
 
 /**
  * Scopes a full page HTML string down to the inner HTML of the first element
@@ -81,12 +80,45 @@ export function extractDate($: CheerioAPI): string {
 export function extractDocumentLinks(
     $: CheerioAPI,
     baseUrl: string,
-    $context: Cheerio<Element>,
+    $context?: Cheerio<Element>,
     hrefPattern?: RegExp,
 ): DocumentData[] {
     const documentsMap = new Map<string, DocumentData>();
 
-    // Helper to safely get the first non-empty string from a list of candidates
+    if (!$context) {
+        return [];
+    }
+
+    const IGNORED_URL_PATTERNS: string[] = [
+        "get.adobe.com",
+        "adobe.com/acrobat",
+        "adobe_reader",
+        "download_acrobat",
+        "get_adobe_reader",
+        "/modules/file/icons/",
+        "/misc/icons/",
+    ];
+
+    const IGNORED_TEXT_PATTERNS: string[] = [
+        "download adobe",
+        "adobe reader",
+        "get adobe",
+        "get acrobat",
+    ];
+
+    const isIgnored = (url: string, ...textCandidates: (string | undefined | null)[]): boolean => {
+        const lowerUrl = url.toLowerCase();
+        if (IGNORED_URL_PATTERNS.some((pattern) => lowerUrl.includes(pattern))) {
+            return true;
+        }
+
+        const combinedText = textCandidates
+            .filter((t): t is string => Boolean(t))
+            .join(" ")
+            .toLowerCase();
+        return IGNORED_TEXT_PATTERNS.some((pattern) => combinedText.includes(pattern));
+    };
+
     const getFirstNonEmptyString = (...candidates: (string | undefined | null)[]): string => {
         for (const item of candidates) {
             if (item && typeof item === "string") {
@@ -99,7 +131,6 @@ export function extractDocumentLinks(
         return "";
     };
 
-    // Helper to normalize relative URLs to absolute URLs
     const toAbsoluteUrl = (url: string): string => {
         try {
             return new URL(url, baseUrl).href;
@@ -108,14 +139,14 @@ export function extractDocumentLinks(
         }
     };
 
-    // Helper to extract clean file extensions (ignoring query parameters)
     const getExtension = (url: string): string => {
         const cleanUrl = url.split("?")[0];
         const parts = cleanUrl.split(".");
-        return parts.length > 1 ? parts.pop()!.toLowerCase() : "";
+        const ext = parts.length > 1 ? parts.pop() : "";
+        return ext ? ext.toLowerCase() : "";
     };
 
-    // 1. EXTRACT FROM ANCHOR TAGS (PDFs, DOCs, Zip, direct file links)
+    // 1. EXTRACT FROM ANCHOR TAGS
     $context.find("a[href]").each((_, el) => {
         const $a = $(el);
         const rawHref = $a.attr("href");
@@ -127,15 +158,19 @@ export function extractDocumentLinks(
         }
 
         const absoluteUrl = toAbsoluteUrl(trimmedHref);
+        const anchorText = $a.text();
+        const titleAttr = $a.attr("title");
 
-        // Filter by pattern if provided
+        if (isIgnored(absoluteUrl, anchorText, titleAttr)) {
+            return;
+        }
+
         if (hrefPattern && !hrefPattern.test(absoluteUrl)) {
             return;
         }
 
         const ext = getExtension(absoluteUrl);
 
-        // Check if link matches common document/media extensions or Drupal file wrapper classes
         const isDocExtension = [
             "pdf",
             "doc",
@@ -151,14 +186,12 @@ export function extractDocumentLinks(
             "png",
             "gif",
         ].includes(ext);
+
         const isFileContainer =
             $a.closest(".file, .field-type-file, .field-name-field-supporting-documents").length >
             0;
 
         if (isDocExtension || isFileContainer) {
-            const anchorText = $a.text();
-            const titleAttr = $a.attr("title");
-
             const fileName = getFirstNonEmptyString(anchorText, titleAttr, "Untitled Document");
 
             documentsMap.set(absoluteUrl, {
@@ -172,7 +205,7 @@ export function extractDocumentLinks(
         }
     });
 
-    // 2. EXTRACT FROM IMAGE TAGS (Handles Drupal thumbnail/image fields)
+    // 2. EXTRACT FROM IMAGE TAGS
     $context.find("img[src]").each((_, el) => {
         const $img = $(el);
         const rawSrc = $img.attr("src");
@@ -181,14 +214,14 @@ export function extractDocumentLinks(
         const trimmedSrc = rawSrc.trim();
         if (!trimmedSrc) return;
 
-        // Skip Drupal default UI/file icons (e.g., application-pdf.png)
-        if (trimmedSrc.includes("/modules/file/icons/") || trimmedSrc.includes("/misc/icons/")) {
+        const absoluteUrl = toAbsoluteUrl(trimmedSrc);
+        const altText = $img.attr("alt");
+        const titleText = $img.attr("title");
+
+        if (isIgnored(absoluteUrl, altText, titleText)) {
             return;
         }
 
-        const absoluteUrl = toAbsoluteUrl(trimmedSrc);
-
-        // Filter by pattern if provided
         if (hrefPattern && !hrefPattern.test(absoluteUrl)) {
             return;
         }
@@ -197,8 +230,6 @@ export function extractDocumentLinks(
         const isImageExtension = ["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext);
 
         if (isImageExtension) {
-            const altText = $img.attr("alt");
-            const titleText = $img.attr("title");
             const parentLinkText = $img.closest("a").text();
             const rowTitleText = $context.find(".views-field-title").text();
 
@@ -210,7 +241,6 @@ export function extractDocumentLinks(
                 `Image_${Date.now()}.${ext}`,
             );
 
-            // Use the clean URL (without query params like ?itok=) as the map key to prevent duplicate entries
             const cleanUrl = absoluteUrl.split("?")[0];
 
             if (!documentsMap.has(cleanUrl)) {

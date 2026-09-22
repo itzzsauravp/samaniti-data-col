@@ -16,14 +16,14 @@ import {
 } from "../../../core/utils/index.js";
 import { executeTransform } from "../../../core/constants/transformers.js";
 
-export const MUNICIPALITY_CODE = "BARDAGHAT";
+export const MUNICIPALITY_CODE = "SUDDHODHAN";
 
 export const MUNICIPALITY_METADATA: MunicipalityData = {
     code: MUNICIPALITY_CODE,
-    nameNe: "बर्दघाट नगरपालिका",
-    nameEn: "Bardaghat Municipality",
+    nameNe: "शुद्धोधन गाउँपालिका",
+    nameEn: "Suddhodhan Rural Municipality",
     province: "Lumbini",
-    district: "Nawalparasi",
+    district: "Rupandehi",
 };
 
 // ---------------------------------------------------------------------------
@@ -153,7 +153,7 @@ async function transformNoticeRow(
     baseUrl: string,
     category: string,
 ): Promise<NoticeData> {
-    const titleAnchor = row.find(".views-field-title a, h2 a").first();
+    const titleAnchor = row.find(".views-field-title a, h2 a, h2, td").first();
     const titleNe = titleAnchor.text().trim().replace(/\s+/g, " ") || "";
     const rawHref = titleAnchor.attr("href") || "";
 
@@ -177,8 +177,6 @@ async function transformNoticeRow(
 
     // 4. File attachments scoped strictly to this row
     const documents: DocumentData[] = extractDocumentLinks($, baseUrl, row);
-
-    console.log("Documents:", documents);
 
     return {
         municipalityCode: MUNICIPALITY_CODE,
@@ -234,10 +232,11 @@ async function transformProjectDetail(page: ScrapedPage): Promise<Partial<EtlPay
 async function transformReportDetail(page: ScrapedPage): Promise<Partial<EtlPayload>> {
     const $ = cheerio.load(page.html);
     const baseUrl = new URL(page.url).origin;
+    const $context = $(".field-item");
 
     const titleNe = extractTitle($);
     const publishedDate = extractDate($);
-    const documents = extractDocumentLinks($, baseUrl, $(".content .field-item"));
+    const documents = extractDocumentLinks($, baseUrl, $context);
 
     return {
         reports: [
@@ -264,11 +263,7 @@ async function transformNoticeDetail(page: ScrapedPage): Promise<Partial<EtlPayl
     const publishedDate = $(".meta.submitted span").attr("content") || null;
 
     if (page.category === "news_notices") {
-        const documents = extractDocumentLinks(
-            $,
-            new URL(page.url).origin,
-            $(".content .field-item"),
-        );
+        const documents = extractDocumentLinks($, new URL(page.url).origin, $(".field-item"));
 
         return {
             notices: [
@@ -329,7 +324,7 @@ async function transformProjectListing(page: ScrapedPage): Promise<Partial<EtlPa
 async function transformReportListing(page: ScrapedPage): Promise<Partial<EtlPayload>> {
     const $ = cheerio.load(page.html);
     const baseUrl = new URL(page.url).origin;
-    const rows = $(".view-content .views-row").toArray();
+    const rows = $(".view-content table tbody tr").toArray();
 
     console.log(`[Project Listing] ${rows.length} row(s) found on ${page.url}`);
 

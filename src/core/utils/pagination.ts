@@ -21,7 +21,7 @@ import * as cheerio from "cheerio";
 export function extractPaginationUrls(html: string, baseUrl: string): string[] {
     const $ = cheerio.load(html);
     // Target the primary content pager first to ignore secondary sidebar blocks
-    const $pager = $("#block-system-main ul.pager, .region-content ul.pager, ul.pager").first();
+    const $pager = $(".introduction .container ul.pager, .region-content ul.pager").first();
     if (!$pager.length) return [];
 
     let basePath = "";
