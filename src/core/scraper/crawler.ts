@@ -38,6 +38,9 @@ export async function crawlRoutes(
             userData: { route, isListingPage: true, pageNum: 1 },
         });
 
+        // Inter-route polite delay to avoid triggering server rate limits
+        await new Promise((resolve) => setTimeout(resolve, 600));
+
         const crawler = new CheerioCrawler({
             requestQueue: queue,
             maxConcurrency: 1,
@@ -45,8 +48,14 @@ export async function crawlRoutes(
             navigationTimeoutSecs: 120,
             requestHandlerTimeoutSecs: 120,
             maxRequestRetries: 2,
+            preNavigationHooks: [
+                async () => {
+                    // Polite throttle to stay within server rate limits (e.g. Banganga nginx limit)
+                    await new Promise((resolve) => setTimeout(resolve, 600));
+                },
+            ],
 
-            async requestHandler({ request, $, body }) {
+            async requestHandler({ request, response, $, body }) {
                 const {
                     route: r,
                     isListingPage,
@@ -57,13 +66,26 @@ export async function crawlRoutes(
                     pageNum: number;
                 };
 
+                // Guard against HTTP error pages (404, 429, 500 etc.) being processed as valid records
+                if (response?.statusCode && response.statusCode >= 400) {
+                    console.warn(
+                        `[Crawler] Skipping error page (${response.statusCode}): ${request.url}`,
+                    );
+                    return;
+                }
+
                 const fullHtml = body.toString();
 
                 // ── LISTING PAGE ──────────────────────────────────────────────────────
                 if (isListingPage) {
                     // 1. Discover and enqueue paginated pages (only from Page 1)
                     if (r.paginated && pageNum === 1) {
-                        const paginatedUrls = extractPaginationUrls(fullHtml, base);
+                        const currentListingUrl = request.loadedUrl ?? request.url;
+                        const paginatedUrls = extractPaginationUrls(
+                            fullHtml,
+                            base,
+                            currentListingUrl,
+                        );
                         console.log(
                             `[Crawler] Route "${r.type}" (${r.live}): discovered ${paginatedUrls.length} additional page(s).`,
                         );

@@ -26,10 +26,33 @@ export function extractLinksFromHtml(html: string, selector: string, baseUrl: st
     $(selector).each((_, el) => {
         const href = $(el).attr("href");
         if (!href) return;
-        const absolute = href.startsWith("http") ? href : `${baseUrl}${href}`;
+        // Trim whitespace/newlines — some themes (e.g. NEB) embed newlines inside href values
+        const trimmed = href.trim();
+        if (!trimmed) return;
+        const absolute = trimmed.startsWith("http") ? trimmed : `${baseUrl}${trimmed}`;
         links.push(absolute);
     });
     return links;
+}
+
+export function extractDate($: CheerioAPI): string {
+    return (
+        // ISO timestamp from the content attribute of the meta/span tag
+        $('span[property="dc:date dc:created"]').attr("content")?.trim() ||
+        $('meta[property="dc:date"]').attr("content")?.trim() ||
+        $('meta[property="article:published_time"]').attr("content")?.trim() ||
+        // NEW: Handles the new theme's date container and cleans up SVG whitespace
+        $(".meta.date").text().replace(/\s+/g, " ").trim() ||
+        // Formatted human-readable date text inside the submitted div or date element
+        $(".submitted span[property*='dc:date']").text().trim() ||
+        $(".meta.submitted")
+            .text()
+            .replace(/^Submitted on:\s*/i, "")
+            .trim() ||
+        $("time").attr("datetime")?.trim() ||
+        $("time").text().trim() ||
+        ""
+    );
 }
 
 /**
@@ -46,6 +69,7 @@ export function isListView(html: string): boolean {
 export function extractTitle($: CheerioAPI): string {
     return (
         $('span[property="dc:title"]').attr("content")?.trim() ||
+        $(".news__title").text().trim() || // NEW: Specific to new municipality theme
         $(".section-title").text().trim() ||
         $(".node-title").text().trim() ||
         $("h1").text().trim() ||
@@ -55,27 +79,6 @@ export function extractTitle($: CheerioAPI): string {
 
 /**
  * Extracts the submission or creation date from HTML, trying multiple selectors in order of preference.
- */
-export function extractDate($: CheerioAPI): string {
-    return (
-        // ISO timestamp from the content attribute of the meta/span tag
-        $('span[property="dc:date dc:created"]').attr("content")?.trim() ||
-        $('meta[property="dc:date"]').attr("content")?.trim() ||
-        $('meta[property="article:published_time"]').attr("content")?.trim() ||
-        // Formatted human-readable date text inside the submitted div or date element
-        $(".submitted span[property*='dc:date']").text().trim() ||
-        $(".meta.submitted")
-            .text()
-            .replace(/^Submitted on:\s*/i, "")
-            .trim() ||
-        $("time").attr("datetime")?.trim() ||
-        $("time").text().trim() ||
-        ""
-    );
-}
-
-/**
- * Extracts PDF/document links from HTML.
  */
 export function extractDocumentLinks(
     $: CheerioAPI,
@@ -97,6 +100,12 @@ export function extractDocumentLinks(
         "get_adobe_reader",
         "/modules/file/icons/",
         "/misc/icons/",
+        "newlogo.png",
+        "logo.png",
+        "logo.svg",
+        "emblem_of_nepal",
+        "/assets/image/",
+        "/static/assets/",
     ];
 
     const IGNORED_TEXT_PATTERNS: string[] = [
@@ -192,7 +201,20 @@ export function extractDocumentLinks(
             0;
 
         if (isDocExtension || isFileContainer) {
-            const fileName = getFirstNonEmptyString(anchorText, titleAttr, "Untitled Document");
+            let fileName = getFirstNonEmptyString(anchorText, titleAttr, "Untitled Document");
+
+            // NEW: Fix generic flipbook button names by decoding the file name from the URL
+            if ($a.hasClass("df-ui-download") || fileName.toLowerCase().includes("download pdf")) {
+                try {
+                    const pathParts = absoluteUrl.split("?")[0].split("/");
+                    const decodedName = decodeURIComponent(pathParts[pathParts.length - 1]);
+                    if (decodedName) {
+                        fileName = decodedName; // Will resolve to the actual Nepali file name
+                    }
+                } catch {
+                    // Fallback silently to whatever generic name it had
+                }
+            }
 
             documentsMap.set(absoluteUrl, {
                 fileName,
@@ -255,6 +277,32 @@ export function extractDocumentLinks(
             }
         }
     });
+
+    // 3. EXTRACT FROM SCRIPT TAGS (e.g. DFlip flipbook: var pdf = '...')
+    const fullHtml = $.html();
+    const scriptMatches = fullHtml.matchAll(/var\s+pdf\s*=\s*['"]([^'"]+\.pdf[^'"]*)['"]/gi);
+    for (const match of scriptMatches) {
+        const rawPdfUrl = match[1].trim();
+        const absoluteUrl = toAbsoluteUrl(rawPdfUrl);
+        if (!isIgnored(absoluteUrl)) {
+            let fileName = "Document.pdf";
+            try {
+                const pathParts = absoluteUrl.split("?")[0].split("/");
+                const decoded = decodeURIComponent(pathParts[pathParts.length - 1]);
+                if (decoded) fileName = decoded;
+            } catch {}
+            if (!documentsMap.has(absoluteUrl)) {
+                documentsMap.set(absoluteUrl, {
+                    fileName,
+                    fileType: "pdf",
+                    originalUrl: absoluteUrl,
+                    storagePath: null,
+                    downloadStatus: "skipped",
+                    downloadError: null,
+                });
+            }
+        }
+    }
 
     return Array.from(documentsMap.values());
 }
