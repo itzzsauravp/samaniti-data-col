@@ -90,6 +90,7 @@ model Document {
   originalUrl    String        @unique @map("original_url")
   storagePath    String?       @map("storage_path")
   policyEntityId String?       @map("policy_entity_id")
+  ocrData        String?       @map("ocr_data")
   createdAt      DateTime      @default(now()) @map("created_at")
   downloadError  String?       @map("download_error")
   downloadStatus String        @default("pending") @map("download_status")

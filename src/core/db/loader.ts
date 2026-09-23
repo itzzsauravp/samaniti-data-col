@@ -173,9 +173,7 @@ export async function recordScraperRun(municipalityCode: string, meta: ScraperRu
  */
 export async function loadEtlData(
     payload: EtlPayload,
-    runMeta?: { scraperName: string; durationMs: number; status?: string; error?: string },
-): Promise<void> {
-    const startTime = Date.now();
+): Promise<{ itemsAdded: number; itemsUpdated: number }> {
     let itemsAdded = 0;
     let itemsUpdated = 0;
 
@@ -199,16 +197,5 @@ export async function loadEtlData(
         }
     }
 
-    const durationMs = runMeta?.durationMs ?? (Date.now() - startTime);
-    const scraperName = runMeta?.scraperName ?? payload.municipality.code;
-    const status = runMeta?.status ?? "success";
-
-    await recordScraperRun(payload.municipality.code, {
-        scraperName,
-        durationMs,
-        status,
-        itemsAdded,
-        itemsUpdated,
-        error: runMeta?.error,
-    });
+    return { itemsAdded, itemsUpdated };
 }
