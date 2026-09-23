@@ -78,7 +78,36 @@ export function extractTitle($: CheerioAPI): string {
 }
 
 /**
- * Extracts the submission or creation date from HTML, trying multiple selectors in order of preference.
+ * Normalizes Drupal/CMS styled image and thumbnail URLs to their original,
+ * uncompressed full-resolution source URLs for high-quality OCR processing.
+ *
+ * Example:
+ *   "https://bardaghatmun.gov.np/sites/bardaghatmun.gov.np/files/styles/thumbnail/public/field/image/Screenshot.png?itok=NZZ6oq5X"
+ * becomes:
+ *   "https://bardaghatmun.gov.np/sites/bardaghatmun.gov.np/files/field/image/Screenshot.png"
+ */
+export function normalizeOriginalImageUrl(url: string): string {
+    // 1. Remove Drupal image style path segment: /styles/{style_name}/(public|private)/
+    let unstyled = url.replace(/\/styles\/[^/]+\/(public|private)\//, "/");
+
+    // 2. Strip Drupal itok query parameter while preserving other params if any
+    try {
+        const parsed = new URL(unstyled);
+        if (parsed.searchParams.has("itok")) {
+            parsed.searchParams.delete("itok");
+            unstyled = parsed.searchParams.toString()
+                ? parsed.href
+                : `${parsed.origin}${parsed.pathname}`;
+        }
+    } catch {
+        unstyled = unstyled.split("?")[0];
+    }
+
+    return unstyled;
+}
+
+/**
+ * Extracts document links, full-resolution images, and embedded flipbooks from HTML.
  */
 export function extractDocumentLinks(
     $: CheerioAPI,
@@ -88,9 +117,8 @@ export function extractDocumentLinks(
 ): DocumentData[] {
     const documentsMap = new Map<string, DocumentData>();
 
-    if (!$context) {
-        return [];
-    }
+    // Fall back to entire body if no context is provided or empty
+    const $target: Cheerio<Element> = $context && $context.length > 0 ? $context : $("body");
 
     const IGNORED_URL_PATTERNS: string[] = [
         "get.adobe.com",
@@ -156,7 +184,7 @@ export function extractDocumentLinks(
     };
 
     // 1. EXTRACT FROM ANCHOR TAGS
-    $context.find("a[href]").each((_, el) => {
+    $target.find("a[href]").each((_, el) => {
         const $a = $(el);
         const rawHref = $a.attr("href");
 
@@ -194,6 +222,7 @@ export function extractDocumentLinks(
             "jpeg",
             "png",
             "gif",
+            "webp",
         ].includes(ext);
 
         const isFileContainer =
@@ -201,25 +230,38 @@ export function extractDocumentLinks(
             0;
 
         if (isDocExtension || isFileContainer) {
-            let fileName = getFirstNonEmptyString(anchorText, titleAttr, "Untitled Document");
+            const isImage = ["jpg", "jpeg", "png", "gif", "webp"].includes(ext);
+            const resolvedUrl = isImage ? normalizeOriginalImageUrl(absoluteUrl) : absoluteUrl;
+            const resolvedExt = getExtension(resolvedUrl) || ext;
 
-            // NEW: Fix generic flipbook button names by decoding the file name from the URL
-            if ($a.hasClass("df-ui-download") || fileName.toLowerCase().includes("download pdf")) {
+            let fileName = getFirstNonEmptyString(anchorText, titleAttr);
+
+            // Decode file name from URL path if anchor text is generic or missing
+            if (
+                !fileName ||
+                $a.hasClass("df-ui-download") ||
+                fileName.toLowerCase().includes("download pdf") ||
+                fileName.toLowerCase().includes("download")
+            ) {
                 try {
-                    const pathParts = absoluteUrl.split("?")[0].split("/");
+                    const pathParts = resolvedUrl.split("?")[0].split("/");
                     const decodedName = decodeURIComponent(pathParts[pathParts.length - 1]);
                     if (decodedName) {
-                        fileName = decodedName; // Will resolve to the actual Nepali file name
+                        fileName = decodedName;
                     }
                 } catch {
-                    // Fallback silently to whatever generic name it had
+                    // Fallback
                 }
             }
 
-            documentsMap.set(absoluteUrl, {
+            if (!fileName) {
+                fileName = "Untitled Document";
+            }
+
+            documentsMap.set(resolvedUrl, {
                 fileName,
-                fileType: ext || "unknown",
-                originalUrl: absoluteUrl,
+                fileType: resolvedExt || "unknown",
+                originalUrl: resolvedUrl,
                 storagePath: null,
                 downloadStatus: "skipped",
                 downloadError: null,
@@ -228,7 +270,7 @@ export function extractDocumentLinks(
     });
 
     // 2. EXTRACT FROM IMAGE TAGS
-    $context.find("img[src]").each((_, el) => {
+    $target.find("img[src]").each((_, el) => {
         const $img = $(el);
         const rawSrc = $img.attr("src");
 
@@ -244,32 +286,63 @@ export function extractDocumentLinks(
             return;
         }
 
-        if (hrefPattern && !hrefPattern.test(absoluteUrl)) {
+        // Check if image is wrapped in an anchor linking directly to full media/file
+        const $parentAnchor = $img.closest("a");
+        const parentHref = $parentAnchor.attr("href")?.trim();
+        let targetUrl = absoluteUrl;
+
+        if (parentHref && !parentHref.startsWith("javascript:") && !parentHref.startsWith("#")) {
+            const parentAbsUrl = toAbsoluteUrl(parentHref);
+            const parentExt = getExtension(parentAbsUrl);
+            const isParentMedia =
+                ["jpg", "jpeg", "png", "gif", "webp", "svg", "pdf", "doc", "docx"].includes(
+                    parentExt,
+                ) || parentAbsUrl.includes("/files/");
+
+            if (isParentMedia && !isIgnored(parentAbsUrl)) {
+                targetUrl = parentAbsUrl;
+            }
+        }
+
+        if (hrefPattern && !hrefPattern.test(targetUrl)) {
             return;
         }
 
-        const ext = getExtension(absoluteUrl);
+        const ext = getExtension(targetUrl);
         const isImageExtension = ["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext);
 
         if (isImageExtension) {
-            const parentLinkText = $img.closest("a").text();
-            const rowTitleText = $context.find(".views-field-title").text();
+            // Un-style Drupal thumbnail/derivative styles to capture the full-resolution asset
+            const normalizedUrl = normalizeOriginalImageUrl(targetUrl);
+            const normalizedExt = getExtension(normalizedUrl) || ext;
+
+            // Extract real filename from URL path
+            let urlFileName = "";
+            try {
+                const pathname = new URL(normalizedUrl).pathname;
+                const base = pathname.split("/").pop();
+                if (base) {
+                    urlFileName = decodeURIComponent(base);
+                }
+            } catch {}
+
+            const parentLinkText = $parentAnchor.text();
+            const rowTitleText = $target.find(".views-field-title").text();
 
             const fileName = getFirstNonEmptyString(
                 altText,
                 titleText,
+                urlFileName,
                 parentLinkText,
                 rowTitleText,
-                `Image_${Date.now()}.${ext}`,
+                `Image_${Date.now()}.${normalizedExt}`,
             );
 
-            const cleanUrl = absoluteUrl.split("?")[0];
-
-            if (!documentsMap.has(cleanUrl)) {
-                documentsMap.set(cleanUrl, {
+            if (!documentsMap.has(normalizedUrl)) {
+                documentsMap.set(normalizedUrl, {
                     fileName,
-                    fileType: ext,
-                    originalUrl: absoluteUrl,
+                    fileType: normalizedExt,
+                    originalUrl: normalizedUrl,
                     storagePath: null,
                     downloadStatus: "skipped",
                     downloadError: null,
