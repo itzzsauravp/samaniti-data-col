@@ -21,22 +21,28 @@ app.get('/api/municipalities', async (req, res) => {
   res.json(municipalities);
 });
 
-// Get municipality by id with projects, reports, notices and their documents
+// Get municipality by id with policyEntities and scraperRuns
 app.get('/api/municipalities/:id', async (req, res) => {
   try {
     const municipality = await prisma.municipality.findUnique({
       where: { id: req.params.id },
       include: {
         profile: true,
-        projects: { include: { documents: true } },
-        reports: { include: { documents: true } },
-        notices: { include: { documents: true } }
+        policyEntities: { include: { documents: true } },
+        scraperRuns: true
       }
     });
     if (!municipality) {
       return res.status(404).json({ error: 'Municipality not found' });
     }
-    res.json(municipality);
+    // Backward compatibility mapping for frontend/clients
+    const responseData = {
+      ...municipality,
+      projects: municipality.policyEntities.filter(p => p.category === 'project'),
+      notices: municipality.policyEntities.filter(p => p.category === 'notice'),
+      reports: municipality.policyEntities.filter(p => p.category === 'report'),
+    };
+    res.json(responseData);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
