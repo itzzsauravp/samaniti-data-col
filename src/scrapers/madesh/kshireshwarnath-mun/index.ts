@@ -10,7 +10,7 @@ import { transform, MUNICIPALITY_CODE } from "./transform.js";
 import { load } from "./load.js";
 import { prisma, recordScraperRun } from "../../../core/db/loader.js";
 
-export class ManarashiswaScraper implements IMunicipalityScraper {
+export class KshireshwarnathScraper implements IMunicipalityScraper {
     public municipalityCode = MUNICIPALITY_CODE;
     public routes = ROUTES;
 
@@ -27,7 +27,7 @@ export class ManarashiswaScraper implements IMunicipalityScraper {
     }
 
     async run(config?: ScraperConfig): Promise<void> {
-        console.log(`[ManarashiswaScraper] Starting ETL run for '${this.municipalityCode}'`);
+        console.log(`[KshireshwarnathScraper] Starting ETL run for '${this.municipalityCode}'`);
         const startTime = Date.now();
         let itemsAdded = 0;
         let itemsUpdated = 0;
@@ -37,7 +37,7 @@ export class ManarashiswaScraper implements IMunicipalityScraper {
         try {
             const pages = await this.extract(config);
             console.log(
-                `[ManarashiswaScraper] Extracted ${pages.length} page(s). Processing incrementally...`,
+                `[KshireshwarnathScraper] Extracted ${pages.length} page(s). Processing incrementally...`,
             );
 
             for (const page of pages) {
@@ -49,14 +49,17 @@ export class ManarashiswaScraper implements IMunicipalityScraper {
                         itemsUpdated += res.itemsUpdated;
                     }
                 } catch (err: any) {
-                    console.error(`[ManarashiswaScraper] Error processing page ${page.url}:`, err);
+                    console.error(
+                        `[KshireshwarnathScraper] Error processing page ${page.url}:`,
+                        err,
+                    );
                 }
             }
-            console.log(`[ManarashiswaScraper] ETL run completed successfully.`);
+            console.log(`[KshireshwarnathScraper] ETL run completed successfully.`);
         } catch (err: any) {
             status = "failed";
             errorMsg = err?.message ?? String(err);
-            console.error(`[ManarashiswaScraper] ETL run failed:`, err);
+            console.error(`[KshireshwarnathScraper] ETL run failed:`, err);
             throw err;
         } finally {
             const durationMs = Date.now() - startTime;
@@ -72,13 +75,13 @@ export class ManarashiswaScraper implements IMunicipalityScraper {
     }
 }
 
-// Run directly: npm run scraper lumbini:laxminiya
+// Run directly: npm run scraper lumbini:ekdara
 (async () => {
-    const scraper = new ManarashiswaScraper();
+    const scraper = new KshireshwarnathScraper();
     try {
         await scraper.run();
     } catch (err) {
-        console.error("[ManarashiswaScraper] Fatal error:", err);
+        console.error("[KshireshwarnathScraper] Fatal error:", err);
         process.exit(1);
     } finally {
         await prisma.$disconnect();
