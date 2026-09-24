@@ -117,8 +117,7 @@ export function extractDocumentLinks(
 ): DocumentData[] {
     const documentsMap = new Map<string, DocumentData>();
 
-    // Fall back to entire body if no context is provided or empty
-    const $target: Cheerio<Element> = $context && $context.length > 0 ? $context : $("body");
+    const targetContext = $context && $context.length > 0 ? $context : $("body");
 
     const IGNORED_URL_PATTERNS: string[] = [
         "get.adobe.com",
@@ -184,7 +183,7 @@ export function extractDocumentLinks(
     };
 
     // 1. EXTRACT FROM ANCHOR TAGS
-    $target.find("a[href]").each((_, el) => {
+    targetContext.find("a[href]").each((_, el) => {
         const $a = $(el);
         const rawHref = $a.attr("href");
 
@@ -226,23 +225,17 @@ export function extractDocumentLinks(
         ].includes(ext);
 
         const isFileContainer =
-            $a.closest(".file, .field-type-file, .field-name-field-supporting-documents").length >
-            0;
+            $a.closest(
+                ".file, .field-type-file, .field-name-field-supporting-documents, .field-name-field-documents",
+            ).length > 0;
 
         if (isDocExtension || isFileContainer) {
             const isImage = ["jpg", "jpeg", "png", "gif", "webp"].includes(ext);
             const resolvedUrl = isImage ? normalizeOriginalImageUrl(absoluteUrl) : absoluteUrl;
             const resolvedExt = getExtension(resolvedUrl) || ext;
 
-            let fileName = getFirstNonEmptyString(anchorText, titleAttr);
-
-            // Decode file name from URL path if anchor text is generic or missing
-            if (
-                !fileName ||
-                $a.hasClass("df-ui-download") ||
-                fileName.toLowerCase().includes("download pdf") ||
-                fileName.toLowerCase().includes("download")
-            ) {
+            // NEW: Fix generic flipbook button names by decoding the file name from the URL
+            if ($a.hasClass("df-ui-download") || fileName.toLowerCase().includes("download")) {
                 try {
                     const pathParts = resolvedUrl.split("?")[0].split("/");
                     const decodedName = decodeURIComponent(pathParts[pathParts.length - 1]);
@@ -270,7 +263,7 @@ export function extractDocumentLinks(
     });
 
     // 2. EXTRACT FROM IMAGE TAGS
-    $target.find("img[src]").each((_, el) => {
+    targetContext.find("img[src]").each((_, el) => {
         const $img = $(el);
         const rawSrc = $img.attr("src");
 
@@ -312,22 +305,8 @@ export function extractDocumentLinks(
         const isImageExtension = ["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext);
 
         if (isImageExtension) {
-            // Un-style Drupal thumbnail/derivative styles to capture the full-resolution asset
-            const normalizedUrl = normalizeOriginalImageUrl(targetUrl);
-            const normalizedExt = getExtension(normalizedUrl) || ext;
-
-            // Extract real filename from URL path
-            let urlFileName = "";
-            try {
-                const pathname = new URL(normalizedUrl).pathname;
-                const base = pathname.split("/").pop();
-                if (base) {
-                    urlFileName = decodeURIComponent(base);
-                }
-            } catch {}
-
-            const parentLinkText = $parentAnchor.text();
-            const rowTitleText = $target.find(".views-field-title").text();
+            const parentLinkText = $img.closest("a").text();
+            const rowTitleText = targetContext.find(".views-field-title").text();
 
             const fileName = getFirstNonEmptyString(
                 altText,
