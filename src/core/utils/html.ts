@@ -216,14 +216,16 @@ export function extractDocumentLinks(
 
     const toAbsoluteUrl = (url: string): string => {
         try {
-            return new URL(url, baseUrl).href;
+            const parsed = new URL(url, baseUrl);
+            parsed.hash = ""; // Clean hash fragments (#view=Fit, etc.)
+            return parsed.href;
         } catch {
-            return url;
+            return url.split("#")[0];
         }
     };
 
     const getExtension = (url: string): string => {
-        const cleanUrl = url.split("?")[0];
+        const cleanUrl = url.split("?")[0].split("#")[0];
         const parts = cleanUrl.split(".");
         const ext = parts.length > 1 ? parts.pop() : "";
         return ext ? ext.toLowerCase() : "";
@@ -288,7 +290,7 @@ export function extractDocumentLinks(
                 fileName.toLowerCase().includes("download")
             ) {
                 try {
-                    const pathParts = resolvedUrl.split("?")[0].split("/");
+                    const pathParts = resolvedUrl.split("?")[0].split("#")[0].split("/");
                     const decodedName = decodeURIComponent(pathParts[pathParts.length - 1]);
                     if (decodedName) {
                         fileName = decodedName;
@@ -363,7 +365,7 @@ export function extractDocumentLinks(
 
             let urlFileName = "";
             try {
-                const pathParts = normalizedUrl.split("?")[0].split("/");
+                const pathParts = normalizedUrl.split("?")[0].split("#")[0].split("/");
                 urlFileName = decodeURIComponent(pathParts[pathParts.length - 1]);
             } catch {}
 
@@ -398,7 +400,7 @@ export function extractDocumentLinks(
         if (!isIgnored(absoluteUrl)) {
             let fileName = "Document.pdf";
             try {
-                const pathParts = absoluteUrl.split("?")[0].split("/");
+                const pathParts = absoluteUrl.split("?")[0].split("#")[0].split("/");
                 const decoded = decodeURIComponent(pathParts[pathParts.length - 1]);
                 if (decoded) fileName = decoded;
             } catch {}
