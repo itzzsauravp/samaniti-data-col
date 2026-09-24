@@ -35,19 +35,66 @@ export function extractLinksFromHtml(html: string, selector: string, baseUrl: st
     return links;
 }
 
+/**
+ * Converts Nepali Devanagari numerals (०-९) to English numerals (0-9).
+ */
+function convertNepaliToEnglishDigits(str: string): string {
+    const nepaliDigits = ["०", "१", "२", "३", "४", "५", "६", "७", "८", "९"];
+    return str.replace(/[०-९]/g, (digit) => nepaliDigits.indexOf(digit).toString());
+}
+
+/**
+ * Extracts and standardizes fiscal years from Drupal taxonomy fields or raw text.
+ * Converts input like "०७८/७९" or "२०७८/७९" -> "2078/79".
+ */
+export function extractFiscalYear($: CheerioAPI): string | null {
+    // 1. Target Drupal fiscal year taxonomy container or general fiscal year fields
+    const rawText =
+        $(".field-name-field-fiscal-year .links, .field-name-field-fiscal-year .field-items")
+            .text()
+            .trim() ||
+        $(".field-name-field-fiscal-year").text().trim() ||
+        "";
+
+    if (!rawText) return null;
+
+    // Convert any Devanagari digits to English
+    const convertedText = convertNepaliToEnglishDigits(rawText);
+
+    // Match 2-digit or 4-digit year format (e.g., "078/79" or "2078/79")
+    const match = convertedText.match(/(\d{2,4})\s*[\/\-]\s*(\d{2})/);
+    if (!match) return null;
+
+    const [, rawStartYear, endYear] = match;
+
+    // Normalize startYear without mutating raw destructuring variables
+    let startYear = rawStartYear;
+    if (startYear.length === 2) {
+        startYear = `20${startYear}`;
+    } else if (startYear.length === 3) {
+        startYear = `2${startYear}`;
+    }
+
+    return `${startYear}/${endYear}`;
+}
+
 export function extractDate($: CheerioAPI): string {
     return (
-        // ISO timestamp from the content attribute of the meta/span tag
+        // 1. ISO timestamp directly from the content attribute of the span
         $('span[property="dc:date dc:created"]').attr("content")?.trim() ||
         $('meta[property="dc:date"]').attr("content")?.trim() ||
         $('meta[property="article:published_time"]').attr("content")?.trim() ||
-        // NEW: Handles the new theme's date container and cleans up SVG whitespace
+        // 2. Fallback to visible text inside the span (e.g. "Fri, 07/22/2022 - 22:39")
+        $('span[property="dc:date dc:created"]').text().trim() ||
+        // 3. Drupal views table cell fallback
+        $(".views-field-created").text().replace(/\s+/g, " ").trim() ||
+        // 4. Custom theme date container
         $(".meta.date").text().replace(/\s+/g, " ").trim() ||
-        // Formatted human-readable date text inside the submitted div or date element
-        $(".submitted span[property*='dc:date']").text().trim() ||
+        // 5. Container string cleanup (strips "Submitted on:")
         $(".meta.submitted")
             .text()
             .replace(/^Submitted on:\s*/i, "")
+            .replace(/\s+/g, " ")
             .trim() ||
         $("time").attr("datetime")?.trim() ||
         $("time").text().trim() ||
@@ -69,7 +116,8 @@ export function isListView(html: string): boolean {
 export function extractTitle($: CheerioAPI): string {
     return (
         $('span[property="dc:title"]').attr("content")?.trim() ||
-        $(".news__title").text().trim() || // NEW: Specific to new municipality theme
+        $("#page-title").text().trim() ||
+        $(".news__title").text().trim() ||
         $(".section-title").text().trim() ||
         $(".node-title").text().trim() ||
         $("h1").text().trim() ||
@@ -116,7 +164,6 @@ export function extractDocumentLinks(
     hrefPattern?: RegExp,
 ): DocumentData[] {
     const documentsMap = new Map<string, DocumentData>();
-
     const targetContext = $context && $context.length > 0 ? $context : $("body");
 
     const IGNORED_URL_PATTERNS: string[] = [
@@ -182,10 +229,10 @@ export function extractDocumentLinks(
         return ext ? ext.toLowerCase() : "";
     };
 
-    // 1. EXTRACT FROM ANCHOR TAGS
-    targetContext.find("a[href]").each((_, el) => {
-        const $a = $(el);
-        const rawHref = $a.attr("href");
+    // 1. EXTRACT FROM ANCHOR TAGS & OBJECT / EMBED TAGS
+    targetContext.find("a[href], object[data], embed[src]").each((_, el) => {
+        const $element = $(el);
+        const rawHref = $element.attr("href") || $element.attr("data") || $element.attr("src");
 
         if (!rawHref) return;
         const trimmedHref = rawHref.trim();
@@ -194,8 +241,8 @@ export function extractDocumentLinks(
         }
 
         const absoluteUrl = toAbsoluteUrl(trimmedHref);
-        const anchorText = $a.text();
-        const titleAttr = $a.attr("title");
+        const anchorText = $element.text();
+        const titleAttr = $element.attr("title");
 
         if (isIgnored(absoluteUrl, anchorText, titleAttr)) {
             return;
@@ -206,7 +253,6 @@ export function extractDocumentLinks(
         }
 
         const ext = getExtension(absoluteUrl);
-
         const isDocExtension = [
             "pdf",
             "doc",
@@ -225,7 +271,7 @@ export function extractDocumentLinks(
         ].includes(ext);
 
         const isFileContainer =
-            $a.closest(
+            $element.closest(
                 ".file, .field-type-file, .field-name-field-supporting-documents, .field-name-field-documents",
             ).length > 0;
 
@@ -234,8 +280,13 @@ export function extractDocumentLinks(
             const resolvedUrl = isImage ? normalizeOriginalImageUrl(absoluteUrl) : absoluteUrl;
             const resolvedExt = getExtension(resolvedUrl) || ext;
 
-            // NEW: Fix generic flipbook button names by decoding the file name from the URL
-            if ($a.hasClass("df-ui-download") || fileName.toLowerCase().includes("download")) {
+            let fileName = getFirstNonEmptyString(titleAttr, anchorText);
+
+            if (
+                $element.hasClass("df-ui-download") ||
+                !fileName ||
+                fileName.toLowerCase().includes("download")
+            ) {
                 try {
                     const pathParts = resolvedUrl.split("?")[0].split("/");
                     const decodedName = decodeURIComponent(pathParts[pathParts.length - 1]);
@@ -279,7 +330,6 @@ export function extractDocumentLinks(
             return;
         }
 
-        // Check if image is wrapped in an anchor linking directly to full media/file
         const $parentAnchor = $img.closest("a");
         const parentHref = $parentAnchor.attr("href")?.trim();
         let targetUrl = absoluteUrl;
@@ -301,12 +351,21 @@ export function extractDocumentLinks(
             return;
         }
 
-        const ext = getExtension(targetUrl);
-        const isImageExtension = ["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext);
+        const normalizedUrl = normalizeOriginalImageUrl(targetUrl);
+        const normalizedExt = getExtension(normalizedUrl);
+        const isImageExtension = ["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(
+            normalizedExt,
+        );
 
         if (isImageExtension) {
             const parentLinkText = $img.closest("a").text();
             const rowTitleText = targetContext.find(".views-field-title").text();
+
+            let urlFileName = "";
+            try {
+                const pathParts = normalizedUrl.split("?")[0].split("/");
+                urlFileName = decodeURIComponent(pathParts[pathParts.length - 1]);
+            } catch {}
 
             const fileName = getFirstNonEmptyString(
                 altText,
@@ -330,7 +389,7 @@ export function extractDocumentLinks(
         }
     });
 
-    // 3. EXTRACT FROM SCRIPT TAGS (e.g. DFlip flipbook: var pdf = '...')
+    // 3. EXTRACT FROM SCRIPT TAGS (e.g. DFlip flipbook)
     const fullHtml = $.html();
     const scriptMatches = fullHtml.matchAll(/var\s+pdf\s*=\s*['"]([^'"]+\.pdf[^'"]*)['"]/gi);
     for (const match of scriptMatches) {

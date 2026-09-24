@@ -10,7 +10,7 @@ import { transform, MUNICIPALITY_CODE } from "./transform.js";
 import { load } from "./load.js";
 import { prisma, recordScraperRun } from "../../../core/db/loader.js";
 
-export class DurgabhagwatiScraper implements IMunicipalityScraper {
+export class EkdaraScraper implements IMunicipalityScraper {
     public municipalityCode = MUNICIPALITY_CODE;
     public routes = ROUTES;
 
@@ -27,7 +27,7 @@ export class DurgabhagwatiScraper implements IMunicipalityScraper {
     }
 
     async run(config?: ScraperConfig): Promise<void> {
-        console.log(`[DurgabhagwatiScraper] Starting ETL run for '${this.municipalityCode}'`);
+        console.log(`[EkdaraScraper] Starting ETL run for '${this.municipalityCode}'`);
         const startTime = Date.now();
         let itemsAdded = 0;
         let itemsUpdated = 0;
@@ -37,7 +37,7 @@ export class DurgabhagwatiScraper implements IMunicipalityScraper {
         try {
             const pages = await this.extract(config);
             console.log(
-                `[DurgabhagwatiScraper] Extracted ${pages.length} page(s). Processing incrementally...`,
+                `[EkdaraScraper] Extracted ${pages.length} page(s). Processing incrementally...`,
             );
 
             for (const page of pages) {
@@ -49,14 +49,14 @@ export class DurgabhagwatiScraper implements IMunicipalityScraper {
                         itemsUpdated += res.itemsUpdated;
                     }
                 } catch (err: any) {
-                    console.error(`[DurgabhagwatiScraper] Error processing page ${page.url}:`, err);
+                    console.error(`[EkdaraScraper] Error processing page ${page.url}:`, err);
                 }
             }
-            console.log(`[DurgabhagwatiScraper] ETL run completed successfully.`);
+            console.log(`[EkdaraScraper] ETL run completed successfully.`);
         } catch (err: any) {
             status = "failed";
             errorMsg = err?.message ?? String(err);
-            console.error(`[DurgabhagwatiScraper] ETL run failed:`, err);
+            console.error(`[EkdaraScraper] ETL run failed:`, err);
             throw err;
         } finally {
             const durationMs = Date.now() - startTime;
@@ -72,13 +72,13 @@ export class DurgabhagwatiScraper implements IMunicipalityScraper {
     }
 }
 
-// Run directly: npm run scraper lumbini:durgabhagwati
+// Run directly: npm run scraper lumbini:ekdara
 (async () => {
-    const scraper = new DurgabhagwatiScraper();
+    const scraper = new EkdaraScraper();
     try {
         await scraper.run();
     } catch (err) {
-        console.error("[DurgabhagwatiScraper] Fatal error:", err);
+        console.error("[EkdaraScraper] Fatal error:", err);
         process.exit(1);
     } finally {
         await prisma.$disconnect();

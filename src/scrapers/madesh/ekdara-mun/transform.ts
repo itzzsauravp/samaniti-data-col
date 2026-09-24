@@ -11,17 +11,18 @@ import {
     extractTitle,
     extractDocumentLinks,
     extractDate,
+    extractFiscalYear,
 } from "../../../core/utils/index.js";
 import { executeTransform } from "../../../core/constants/transformers.js";
 
-export const MUNICIPALITY_CODE = "DURGABHAGWATI";
+export const MUNICIPALITY_CODE = "EKDARA";
 
 export const MUNICIPALITY_METADATA: MunicipalityData = {
     code: MUNICIPALITY_CODE,
-    nameNe: "दुर्गा भगवती गाउँपालिका",
-    nameEn: " दुर्गा भगवती Rural Municipality",
+    nameNe: "एकडारा गाउँपालिका",
+    nameEn: "Ekdara Rural Municipality",
     province: "Madhesh",
-    district: "Rautahat",
+    district: "Mahottari",
 };
 
 // ---------------------------------------------------------------------------
@@ -190,13 +191,15 @@ async function transformNoticeRow(
 // Detail page transformers
 // ---------------------------------------------------------------------------
 
-async function transformProjectDetail(page: ScrapedPage): Promise<Partial<EtlPayload>> {
+export async function transformProjectDetail(page: ScrapedPage): Promise<Partial<EtlPayload>> {
     const $ = cheerio.load(page.html);
     const baseUrl = new URL(page.url).origin;
     const $context = $(".content");
 
     const titleNe = extractTitle($);
     const documents = extractDocumentLinks($, baseUrl, $context);
+    const publishedDate = extractDate($);
+    const fiscalYear = extractFiscalYear($);
 
     console.log(`[Project Detail] "${titleNe}" | docs: ${documents.length} | url: ${page.url}`);
 
@@ -208,12 +211,13 @@ async function transformProjectDetail(page: ScrapedPage): Promise<Partial<EtlPay
                 titleNe,
                 titleEn: null,
                 budgetAmount: null,
-                fiscalYear: parseNepaliFiscalYear(titleNe) || null,
+                fiscalYear: fiscalYear,
                 status: "",
                 wardNo: null,
                 sourceUrl: decodeURIComponent(page.url),
                 documents,
                 type: page.category,
+                publishedDate,
             },
         ],
     };
@@ -222,11 +226,13 @@ async function transformProjectDetail(page: ScrapedPage): Promise<Partial<EtlPay
 async function transformReportDetail(page: ScrapedPage): Promise<Partial<EtlPayload>> {
     const $ = cheerio.load(page.html);
     const baseUrl = new URL(page.url).origin;
-    const titleNe = extractTitle($);
-    const publishedDate = extractDate($);
 
     const $context = $(".content");
+
+    const titleNe = extractTitle($);
     const documents = extractDocumentLinks($, baseUrl, $context);
+    const publishedDate = extractDate($);
+    const fiscalYear = extractFiscalYear($);
 
     console.log(
         `[Report Detail] "${titleNe}" | date: ${publishedDate} | docs: ${documents.length} | url: ${page.url}`,
@@ -240,7 +246,7 @@ async function transformReportDetail(page: ScrapedPage): Promise<Partial<EtlPayl
                 titleNe,
                 titleEn: null,
                 type: page.category,
-                fiscalYear: parseNepaliFiscalYear(titleNe) || null,
+                fiscalYear,
                 publishedDate,
                 sourceUrl: decodeURIComponent(page.url),
                 documents,
@@ -252,11 +258,12 @@ async function transformReportDetail(page: ScrapedPage): Promise<Partial<EtlPayl
 async function transformNoticeDetail(page: ScrapedPage): Promise<Partial<EtlPayload>> {
     const $ = cheerio.load(page.html);
     const baseUrl = new URL(page.url).origin;
-    const titleNe = extractTitle($);
-    const publishedDate = extractDate($);
     const $context = $(".content");
 
+    const titleNe = extractTitle($);
     const documents = extractDocumentLinks($, baseUrl, $context);
+    const publishedDate = extractDate($);
+    const fiscalYear = extractFiscalYear($);
 
     console.log(
         `[Notice Detail] "${titleNe}" | date: ${publishedDate} | docs: ${documents.length} | url: ${page.url}`,
@@ -270,6 +277,7 @@ async function transformNoticeDetail(page: ScrapedPage): Promise<Partial<EtlPayl
                 titleNe,
                 titleEn: null,
                 contentNe: null,
+                fiscalYear,
                 type: page.category,
                 publishedDate,
                 sourceUrl: decodeURIComponent(page.url),
