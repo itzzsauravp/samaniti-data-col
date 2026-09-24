@@ -29,6 +29,11 @@ async function main() {
         const municipalitiesDeleted = await prisma.municipality.deleteMany({});
         console.log(`✅ Deleted ${municipalitiesDeleted.count} municipalities\n`);
 
+        // Delete scrape runs
+        console.log("Deleting municipalities...");
+        const scrapeRunsDelete = await prisma.scraperRun.deleteMany({});
+        console.log(`✅ Deleted ${municipalitiesDeleted.count} scrape runs\n`);
+
         console.log("Database reset complete!");
         console.log("\nSummary:");
         console.log(`Documents: ${documentsDeleted.count}`);

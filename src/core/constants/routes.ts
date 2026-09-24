@@ -26,7 +26,7 @@ export function createStandardGovRoutes(
             baseUrl,
             paginated: true,
             contentSelector: ".introduction .container",
-            detailContentSelector: ".introduction .container .row",
+            detailContentSelector: ".introduction .container",
             detailType: "projectDetail",
         },
         {
@@ -35,7 +35,7 @@ export function createStandardGovRoutes(
             baseUrl,
             paginated: true,
             contentSelector: ".introduction .container",
-            detailContentSelector: ".introduction .container .row",
+            detailContentSelector: ".introduction .container",
             detailType: "projectDetail",
         },
         {
@@ -44,7 +44,7 @@ export function createStandardGovRoutes(
             baseUrl,
             paginated: true,
             contentSelector: ".introduction .container",
-            detailContentSelector: ".introduction .container .row",
+            detailContentSelector: ".introduction .container",
             detailType: "projectDetail",
         },
 
@@ -55,7 +55,7 @@ export function createStandardGovRoutes(
             baseUrl,
             paginated: true,
             contentSelector: ".introduction .container",
-            detailContentSelector: ".introduction .container .row",
+            detailContentSelector: ".introduction .container",
             detailType: "reportDetail",
         },
         {
@@ -64,7 +64,7 @@ export function createStandardGovRoutes(
             baseUrl,
             paginated: true,
             contentSelector: ".introduction .container",
-            detailContentSelector: ".introduction .container .row",
+            detailContentSelector: ".introduction .container",
             detailType: "reportDetail",
         },
         {
@@ -73,7 +73,7 @@ export function createStandardGovRoutes(
             baseUrl,
             paginated: true,
             contentSelector: ".introduction .container",
-            detailContentSelector: ".introduction .container .row",
+            detailContentSelector: ".introduction .container",
             detailType: "reportDetail",
         },
         {
@@ -82,7 +82,7 @@ export function createStandardGovRoutes(
             baseUrl,
             paginated: true,
             contentSelector: ".introduction .container",
-            detailContentSelector: ".introduction .container .row",
+            detailContentSelector: ".introduction .container",
             detailType: "reportDetail",
         },
         {
@@ -91,7 +91,7 @@ export function createStandardGovRoutes(
             baseUrl,
             paginated: true,
             contentSelector: ".introduction .container",
-            detailContentSelector: ".introduction .container .row",
+            detailContentSelector: ".introduction .container",
             detailType: "reportDetail",
         },
         {
@@ -100,7 +100,7 @@ export function createStandardGovRoutes(
             baseUrl,
             paginated: true,
             contentSelector: ".introduction .container",
-            detailContentSelector: ".introduction .container .row",
+            detailContentSelector: ".introduction .container",
             detailType: "reportDetail",
         },
         {
@@ -109,7 +109,7 @@ export function createStandardGovRoutes(
             baseUrl,
             paginated: true,
             contentSelector: ".introduction .container",
-            detailContentSelector: ".introduction .container .row",
+            detailContentSelector: ".introduction .container",
             detailType: "reportDetail",
         },
 
@@ -120,7 +120,7 @@ export function createStandardGovRoutes(
             baseUrl,
             paginated: true,
             contentSelector: ".introduction .container",
-            detailContentSelector: ".introduction .container .row",
+            detailContentSelector: ".introduction .container",
             detailType: "noticeDetail",
         },
         {
@@ -129,7 +129,7 @@ export function createStandardGovRoutes(
             baseUrl,
             paginated: true,
             contentSelector: ".introduction .container",
-            detailContentSelector: ".introduction .container .row",
+            detailContentSelector: ".introduction .container",
             detailType: "noticeDetail",
         },
         {
@@ -138,7 +138,7 @@ export function createStandardGovRoutes(
             baseUrl,
             paginated: true,
             contentSelector: ".introduction .container",
-            detailContentSelector: ".introduction .container .row",
+            detailContentSelector: ".introduction .container",
             detailType: "noticeDetail",
         },
         {
@@ -147,7 +147,7 @@ export function createStandardGovRoutes(
             baseUrl,
             paginated: true,
             contentSelector: ".introduction .container",
-            detailContentSelector: ".introduction .container .row",
+            detailContentSelector: ".introduction .container",
             detailType: "noticeDetail",
         },
         {
@@ -156,7 +156,7 @@ export function createStandardGovRoutes(
             baseUrl,
             paginated: true,
             contentSelector: ".introduction .container",
-            detailContentSelector: ".introduction .container .row",
+            detailContentSelector: ".introduction .container",
             detailType: "noticeDetail",
         },
         {
@@ -165,7 +165,7 @@ export function createStandardGovRoutes(
             baseUrl,
             paginated: true,
             contentSelector: ".introduction .container",
-            detailContentSelector: ".introduction .container .row",
+            detailContentSelector: ".introduction .container",
             detailType: "noticeDetail",
         },
         {
@@ -174,7 +174,7 @@ export function createStandardGovRoutes(
             baseUrl,
             paginated: true,
             contentSelector: ".introduction .container",
-            detailContentSelector: ".introduction .container .row",
+            detailContentSelector: ".introduction .container",
             detailType: "noticeDetail",
         },
         {
@@ -183,7 +183,7 @@ export function createStandardGovRoutes(
             baseUrl,
             paginated: true,
             contentSelector: ".introduction .container",
-            detailContentSelector: ".introduction .container .row",
+            detailContentSelector: ".introduction .container",
             detailType: "noticeDetail",
         },
     ];
