@@ -76,7 +76,8 @@ export class ShuddhodhanScraper implements IMunicipalityScraper {
 (async () => {
     const scraper = new ShuddhodhanScraper();
     try {
-        await scraper.run();
+        const filterRoute = process.env.FILTER_ROUTE;
+        await scraper.run(filterRoute ? { filterRoute } : undefined);
     } catch (err) {
         console.error("[ShuddhodhanScraper] Fatal error:", err);
         process.exit(1);

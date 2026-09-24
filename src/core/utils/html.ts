@@ -20,6 +20,142 @@ export function scopeHtml(fullHtml: string, selector: string): string {
 /**
  * Extracts all absolute hrefs from an HTML string using a selector.
  */
+
+/**
+ * Automatically discovers detail page links from listing pages, supporting both:
+ * 1. Tabular format (<table>, .views-table)
+ * 2. Listing format (.views-row, cards, etc.)
+ * 3. Explicit custom selector override (e.g. Banganga's h3.card__title a)
+ */
+export function extractDetailLinksFromListing(
+    html: string,
+    baseUrl: string,
+    explicitSelector?: string,
+): string[] {
+    const $ = cheerioLoad(html);
+    const links = new Set<string>();
+
+    const IGNORED_EXTENSIONS = [
+        ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+        ".zip", ".tar", ".gz", ".png", ".jpg", ".jpeg", ".webp", ".svg",
+    ];
+
+    const isDetailUrlCandidate = (href: string): boolean => {
+        if (!href) return false;
+        const trimmed = href.trim();
+        if (
+            !trimmed ||
+            trimmed.startsWith("#") ||
+            trimmed.startsWith("javascript:") ||
+            trimmed.startsWith("mailto:") ||
+            trimmed.startsWith("tel:")
+        ) {
+            return false;
+        }
+
+        try {
+            const urlObj = new URL(trimmed, baseUrl);
+            const pathname = urlObj.pathname.toLowerCase();
+            const cleanPath = pathname.replace(/\/$/, "");
+
+            // Ignore top-level root / language roots
+            if (
+                cleanPath === "" ||
+                cleanPath === "/ne" ||
+                cleanPath === "/en" ||
+                cleanPath === "/user/login"
+            ) {
+                return false;
+            }
+
+            // Ignore pagination links (usually handled by extractPaginationUrls)
+            if (urlObj.searchParams.has("page")) {
+                return false;
+            }
+
+            // Exclude direct media files
+            if (IGNORED_EXTENSIONS.some((ext) => cleanPath.endsWith(ext))) {
+                return false;
+            }
+
+            return true;
+        } catch {
+            return false;
+        }
+    };
+
+    const addUrl = (rawHref: string | undefined) => {
+        if (!rawHref) return;
+        if (isDetailUrlCandidate(rawHref)) {
+            try {
+                const abs = new URL(rawHref.trim(), baseUrl).href;
+                links.add(abs);
+            } catch {}
+        }
+    };
+
+    // 1. Explicit Selector if supplied by RouteConfig
+    if (explicitSelector) {
+        $(explicitSelector).each((_, el) => {
+            addUrl($(el).attr("href"));
+        });
+        if (links.size > 0) {
+            return Array.from(links);
+        }
+    }
+
+    // 2. Tabular Layout Detection: Check for table rows
+    const $tables = $("table tbody tr, .views-table tbody tr, table tr");
+    if ($tables.length > 0) {
+        $tables.each((_, tr) => {
+            const $tr = $(tr);
+            if ($tr.find("th").length > 0 && $tr.find("td").length === 0) return;
+
+            const $contentAnchors = $tr.find(
+                "a[href*='/content/'], a[href*='/node/'], .views-field-title a, td:first-child a"
+            );
+            if ($contentAnchors.length > 0) {
+                $contentAnchors.each((_, el) => addUrl($(el).attr("href")));
+            } else {
+                $tr.find("td a").each((_, el) => addUrl($(el).attr("href")));
+            }
+        });
+
+        if (links.size > 0) {
+            return Array.from(links);
+        }
+    }
+
+    // 3. Listing Layout Detection: Check for .views-row or article listing items
+    const $viewsRows = $(".views-row, article, .card, .item-list li");
+    if ($viewsRows.length > 0) {
+        $viewsRows.each((_, row) => {
+            const $row = $(row);
+            const $anchors = $row.find(
+                "h2 a, h3 a, .views-field-title a, .field-content a[href*='/content/'], .field-content a[href*='/node/']"
+            );
+            if ($anchors.length > 0) {
+                $anchors.each((_, el) => addUrl($(el).attr("href")));
+            } else {
+                $row.find("a[href*='/content/'], a[href*='/node/']").each((_, el) => addUrl($(el).attr("href")));
+            }
+        });
+
+        if (links.size > 0) {
+            return Array.from(links);
+        }
+    }
+
+    // 4. Generic Fallback: target all content/node links inside main container
+    const $scope = $(".view-content, .region-content, .introduction .container, main, #content");
+    const container = $scope.length > 0 ? $scope : $("body");
+    container.find("h2 a, h3 a, a[href*='/content/'], a[href*='/node/']").each((_, el) => {
+        addUrl($(el).attr("href"));
+    });
+
+    return Array.from(links);
+}
+
 export function extractLinksFromHtml(html: string, selector: string, baseUrl: string): string[] {
     const $ = cheerioLoad(html);
     const links: string[] = [];
@@ -234,8 +370,9 @@ export function extractDocumentLinks(
             const resolvedUrl = isImage ? normalizeOriginalImageUrl(absoluteUrl) : absoluteUrl;
             const resolvedExt = getExtension(resolvedUrl) || ext;
 
+            let fileName = getFirstNonEmptyString(anchorText, titleAttr);
             // NEW: Fix generic flipbook button names by decoding the file name from the URL
-            if ($a.hasClass("df-ui-download") || fileName.toLowerCase().includes("download")) {
+            if (!fileName || $a.hasClass("df-ui-download") || fileName.toLowerCase().includes("download")) {
                 try {
                     const pathParts = resolvedUrl.split("?")[0].split("/");
                     const decodedName = decodeURIComponent(pathParts[pathParts.length - 1]);
@@ -305,6 +442,14 @@ export function extractDocumentLinks(
         const isImageExtension = ["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext);
 
         if (isImageExtension) {
+            const normalizedUrl = normalizeOriginalImageUrl(targetUrl);
+            const normalizedExt = getExtension(normalizedUrl) || ext;
+            let urlFileName = "";
+            try {
+                const parts = normalizedUrl.split("?")[0].split("/");
+                urlFileName = decodeURIComponent(parts[parts.length - 1]) || "";
+            } catch {}
+
             const parentLinkText = $img.closest("a").text();
             const rowTitleText = targetContext.find(".views-field-title").text();
 

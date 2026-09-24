@@ -76,7 +76,8 @@ export class DhankaulScraper implements IMunicipalityScraper {
 (async () => {
     const scraper = new DhankaulScraper();
     try {
-        await scraper.run();
+        const filterRoute = process.env.FILTER_ROUTE;
+        await scraper.run(filterRoute ? { filterRoute } : undefined);
     } catch (err) {
         console.error("[DhankaulScraper] Fatal error:", err);
         process.exit(1);

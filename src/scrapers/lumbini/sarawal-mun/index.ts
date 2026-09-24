@@ -76,7 +76,8 @@ export class SarawalScraper implements IMunicipalityScraper {
 (async () => {
     const scraper = new SarawalScraper();
     try {
-        await scraper.run();
+        const filterRoute = process.env.FILTER_ROUTE;
+        await scraper.run(filterRoute ? { filterRoute } : undefined);
     } catch (err) {
         console.error("[SarawalScraper] Fatal error:", err);
         process.exit(1);

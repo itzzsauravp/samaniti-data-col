@@ -76,7 +76,8 @@ export class BardaghatScraper implements IMunicipalityScraper {
 (async () => {
     const scraper = new BardaghatScraper();
     try {
-        await scraper.run();
+        const filterRoute = process.env.FILTER_ROUTE;
+        await scraper.run(filterRoute ? { filterRoute } : undefined);
     } catch (err) {
         console.error("[BardaghatScraper] Fatal error:", err);
         process.exit(1);

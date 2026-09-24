@@ -76,7 +76,8 @@ export class KanchanScraper implements IMunicipalityScraper {
 (async () => {
     const scraper = new KanchanScraper();
     try {
-        await scraper.run();
+        const filterRoute = process.env.FILTER_ROUTE;
+        await scraper.run(filterRoute ? { filterRoute } : undefined);
     } catch (err) {
         console.error("[KanchanScraper] Fatal error:", err);
         process.exit(1);

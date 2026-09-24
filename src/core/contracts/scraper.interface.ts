@@ -2,6 +2,8 @@ import { EtlPayload } from "../types/domain.js";
 
 export interface ScraperConfig {
   timeoutMs?: number;
+  filterRoute?: string;
+  concurrency?: number;
 }
 
 export interface RouteConfig {
@@ -17,9 +19,10 @@ export interface RouteConfig {
 
 export interface ScrapedPage {
   url: string;
-  html: string; // Scoped HTML fragment (or full body if no contentSelector)
+  html: string; // Detail page HTML (or scoped context)
   routeType: string; // Carries route.type through extraction for transformer dispatch
   category?: string; // this will basically be mapped as 'type' in the database
+  isDetailPage?: boolean;
 }
 
 export interface IMunicipalityScraper {

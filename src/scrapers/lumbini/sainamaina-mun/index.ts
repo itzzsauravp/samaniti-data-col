@@ -76,7 +76,8 @@ export class SainamainaScraper implements IMunicipalityScraper {
 (async () => {
     const scraper = new SainamainaScraper();
     try {
-        await scraper.run();
+        const filterRoute = process.env.FILTER_ROUTE;
+        await scraper.run(filterRoute ? { filterRoute } : undefined);
     } catch (err) {
         console.error("[SainamainaScraper] Fatal error:", err);
         process.exit(1);

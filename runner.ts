@@ -120,12 +120,16 @@ export function resolveTargets(
     return { targets: [], isSingle: false, scopeDesc: `No matches for '${clean}'` };
 }
 
-function executeSingle(target: ScraperTarget): Promise<number> {
+function executeSingle(target: ScraperTarget, routeFilter?: string | null): Promise<number> {
     console.log(`[Runner] Executing scraper for '${target.displayName}'...\n`);
     return new Promise((resolve) => {
         const child = spawn("npx", ["tsx", target.path], {
             stdio: "inherit",
-            env: process.env,
+            env: {
+                ...process.env,
+                FILTER_ROUTE: routeFilter || process.env.FILTER_ROUTE || "",
+                CRAWLEE_STORAGE_DIR: path.resolve(`./storage/tmp/crawlee-${target.municipality}-${Date.now()}`),
+            },
         });
 
         child.on("close", (code) => {
@@ -142,6 +146,7 @@ function executeSingle(target: ScraperTarget): Promise<number> {
 async function executeParallel(
     targets: ScraperTarget[],
     concurrency: number,
+    routeFilter?: string | null,
 ): Promise<ScraperResult[]> {
     console.log(`\n[Runner] 🚀 Starting parallel execution of ${targets.length} scraper(s)...`);
     console.log(
@@ -166,7 +171,11 @@ async function executeParallel(
             const result = await new Promise<ScraperResult>((resolve) => {
                 const child = spawn("npx", ["tsx", target.path], {
                     stdio: ["ignore", "pipe", "pipe"],
-                    env: process.env,
+                    env: {
+                        ...process.env,
+                        FILTER_ROUTE: routeFilter || process.env.FILTER_ROUTE || "",
+                        CRAWLEE_STORAGE_DIR: path.resolve(`./storage/tmp/crawlee-${target.municipality}-${Date.now()}`),
+                    },
                 });
 
                 if (child.stdout) {
@@ -286,6 +295,7 @@ export async function runScraper(targetArg?: string): Promise<void> {
     const rawArgs = process.argv.slice(2);
 
     let customConcurrency: number | null = null;
+    let routeFilter: string | null = null;
     const positionalArgs: string[] = [];
 
     for (let i = 0; i < rawArgs.length; i++) {
@@ -297,6 +307,8 @@ export async function runScraper(targetArg?: string): Promise<void> {
         } else if (arg.startsWith("--concurrency=")) {
             const val = parseInt(arg.split("=")[1], 10);
             if (!isNaN(val) && val > 0) customConcurrency = val;
+        } else if (arg.startsWith("--route=")) {
+            routeFilter = arg.split("=")[1];
         } else if (arg === "-c" && i + 1 < rawArgs.length) {
             const val = parseInt(rawArgs[++i], 10);
             if (!isNaN(val) && val > 0) customConcurrency = val;
@@ -326,13 +338,13 @@ export async function runScraper(targetArg?: string): Promise<void> {
     }
 
     if (isSingle) {
-        const exitCode = await executeSingle(targets[0]);
+        const exitCode = await executeSingle(targets[0], routeFilter);
         process.exit(exitCode);
     } else {
         const cpus = os.cpus().length || 4;
-        const concurrency = customConcurrency || cpus;
+        const concurrency = customConcurrency || Math.min(cpus, 3);
         console.log(`[Runner] Target Scope: ${scopeDesc}`);
-        const results = await executeParallel(targets, concurrency);
+        const results = await executeParallel(targets, concurrency, routeFilter);
         const hasFailure = results.some((r) => !r.success);
         process.exit(hasFailure ? 1 : 0);
     }

@@ -76,7 +76,8 @@ export class BangangaScraper implements IMunicipalityScraper {
 (async () => {
     const scraper = new BangangaScraper();
     try {
-        await scraper.run();
+        const filterRoute = process.env.FILTER_ROUTE;
+        await scraper.run(filterRoute ? { filterRoute } : undefined);
     } catch (err) {
         console.error("[BangangaScraper] Fatal error:", err);
         process.exit(1);
