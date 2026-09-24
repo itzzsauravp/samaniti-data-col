@@ -143,6 +143,65 @@ function executeSingle(target: ScraperTarget, routeFilter?: string | null): Prom
     });
 }
 
+/**
+ * Runs scrapers one-by-one in strict order. Safer for government portals
+ * with rate limits and avoids Crawlee storage lock collisions.
+ * This is the default mode for multi-target runs.
+ */
+async function executeSequential(
+    targets: ScraperTarget[],
+    routeFilter?: string | null,
+): Promise<ScraperResult[]> {
+    console.log(`\n[Runner] 🔁 Starting sequential execution of ${targets.length} scraper(s)...\n`);
+
+    const results: ScraperResult[] = [];
+    const startTime = Date.now();
+
+    for (let i = 0; i < targets.length; i++) {
+        const target = targets[i];
+        const itemStartTime = Date.now();
+
+        console.log(`[Runner] [${i + 1}/${targets.length}] Starting ${target.displayName}`);
+
+        const exitCode = await executeSingle(target, routeFilter);
+        const durationMs = Date.now() - itemStartTime;
+        const success = exitCode === 0;
+
+        if (success) {
+            console.log(
+                `[Runner] ✅ ${target.displayName} completed in ${(durationMs / 1000).toFixed(1)}s (${i + 1}/${targets.length})`,
+            );
+        } else {
+            console.error(
+                `[Runner] ❌ ${target.displayName} failed (exit ${exitCode}) in ${(durationMs / 1000).toFixed(1)}s (${i + 1}/${targets.length})`,
+            );
+        }
+
+        results.push({ target, success, durationMs, exitCode });
+    }
+
+    const totalDurationSec = ((Date.now() - startTime) / 1000).toFixed(1);
+    const successful = results.filter((r) => r.success).length;
+    const failed = results.filter((r) => !r.success).length;
+
+    console.log(`\n============================================================`);
+    console.log(`[Runner] 📊 Execution Summary (Sequential)`);
+    console.log(`============================================================`);
+    for (const r of results) {
+        const icon = r.success ? "✅" : "❌";
+        const dur = (r.durationMs / 1000).toFixed(1) + "s";
+        console.log(
+            `  ${icon} ${r.target.displayName.padEnd(25)} Duration: ${dur.padStart(6)}${r.success ? "" : ` (Exit Code: ${r.exitCode})`}`,
+        );
+    }
+    console.log(`------------------------------------------------------------`);
+    console.log(`Total: ${results.length} | Succeeded: ${successful} | Failed: ${failed}`);
+    console.log(`Total Elapsed Time: ${totalDurationSec}s`);
+    console.log(`============================================================\n`);
+
+    return results;
+}
+
 async function executeParallel(
     targets: ScraperTarget[],
     concurrency: number,
@@ -262,22 +321,30 @@ async function executeParallel(
 function printUsageAndList(available: ScraperTarget[]) {
     console.log("Usage:");
     console.log(
-        "  npm run scraper                            # Run all municipalities in all provinces (Parallel)",
+        "  npm run scraper                              # Run all scrapers, sequential (default)",
     );
     console.log(
-        "  npm run scraper <province>                 # Run all municipalities in that province (Parallel)",
+        "  npm run scraper <province>                   # Run all scrapers in a province, sequential",
     );
     console.log(
-        "  npm run scraper <province>:<municipality>  # Run a specific municipality (Sequential)\n",
+        "  npm run scraper <province>:<municipality>    # Run a specific municipality\n",
     );
     console.log("Options:");
     console.log(
-        "  --concurrency=<N>, -c <N>                  # Set max parallel workers (Default: CPU count)\n",
+        "  --mode=seq|par                               # Execution mode. seq=sequential (default), par=parallel",
+    );
+    console.log(
+        "  --concurrency=<N>, -c <N>                   # Max parallel workers when --mode=par (default: min(cpus,3))",
+    );
+    console.log(
+        "  --route=<path>                               # Filter to a single route for fast testing\n",
     );
     console.log("Examples:");
-    console.log("  npm run scraper");
-    console.log("  npm run scraper lumbini");
-    console.log("  npm run scraper lumbini:banganga\n");
+    console.log("  npm run scraper lumbini                         # Sequential (default)");
+    console.log("  npm run scraper lumbini --mode=par              # Parallel");
+    console.log("  npm run scraper lumbini --mode=par -c 2         # Parallel, 2 workers");
+    console.log("  npm run scraper lumbini:sainamaina              # Single municipality");
+    console.log("  npm run scraper lumbini:sainamaina --route=/budget-program  # Single route\n");
 
     if (available.length > 0) {
         console.log("Available Scrapers:");
@@ -296,6 +363,7 @@ export async function runScraper(targetArg?: string): Promise<void> {
 
     let customConcurrency: number | null = null;
     let routeFilter: string | null = null;
+    let execMode: "seq" | "par" = "seq"; // Default: sequential
     const positionalArgs: string[] = [];
 
     for (let i = 0; i < rawArgs.length; i++) {
@@ -309,6 +377,14 @@ export async function runScraper(targetArg?: string): Promise<void> {
             if (!isNaN(val) && val > 0) customConcurrency = val;
         } else if (arg.startsWith("--route=")) {
             routeFilter = arg.split("=")[1];
+        } else if (arg.startsWith("--mode=")) {
+            const m = arg.split("=")[1].toLowerCase();
+            if (m === "par" || m === "parallel") execMode = "par";
+            else if (m === "seq" || m === "sequential") execMode = "seq";
+            else {
+                console.error(`[Runner] Unknown --mode value "${m}". Use: --mode=seq or --mode=par`);
+                process.exit(1);
+            }
         } else if (arg === "-c" && i + 1 < rawArgs.length) {
             const val = parseInt(rawArgs[++i], 10);
             if (!isNaN(val) && val > 0) customConcurrency = val;
@@ -341,10 +417,17 @@ export async function runScraper(targetArg?: string): Promise<void> {
         const exitCode = await executeSingle(targets[0], routeFilter);
         process.exit(exitCode);
     } else {
-        const cpus = os.cpus().length || 4;
-        const concurrency = customConcurrency || Math.min(cpus, 3);
         console.log(`[Runner] Target Scope: ${scopeDesc}`);
-        const results = await executeParallel(targets, concurrency, routeFilter);
+        let results: ScraperResult[];
+
+        if (execMode === "par") {
+            const cpus = os.cpus().length || 4;
+            const concurrency = customConcurrency || Math.min(cpus, 3);
+            results = await executeParallel(targets, concurrency, routeFilter);
+        } else {
+            results = await executeSequential(targets, routeFilter);
+        }
+
         const hasFailure = results.some((r) => !r.success);
         process.exit(hasFailure ? 1 : 0);
     }
