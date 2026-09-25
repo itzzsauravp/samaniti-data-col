@@ -1,4 +1,5 @@
 import { load as cheerioLoad, CheerioAPI, Cheerio, Element } from "cheerio";
+import { chromium } from "playwright";
 import { DocumentData } from "../types/domain.js";
 
 /**
@@ -152,6 +153,49 @@ export function normalizeOriginalImageUrl(url: string): string {
     }
 
     return unstyled;
+}
+
+export async function extractCdnLinksViaNetwork(
+    pageUrl: string,
+    cdnDomains = ["lgwebprimarycdn.gov.np"],
+): Promise<DocumentData[]> {
+    console.log("[CDN Extraction] running...");
+    const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+
+    const capturedUrls = new Set<string>();
+
+    // Listen to ALL outgoing network requests (XHR, Fetch, Document loads)
+    page.on("request", (request) => {
+        const url = request.url();
+        if (cdnDomains.some((domain) => url.includes(domain))) {
+            if (url.endsWith(".pdf") || url.includes("/media/pdf_upload/")) {
+                capturedUrls.add(url);
+            }
+        }
+    });
+
+    try {
+        // Navigate and wait for network activity to settle (JS / XHR execution)
+        await page.goto(pageUrl, { waitUntil: "networkidle", timeout: 30000 });
+    } catch (e) {
+        console.warn(
+            `Timeout or error loading ${pageUrl}, processing captured links anyway. Error: ${(e as any).message}`,
+        );
+    } finally {
+        await browser.close();
+    }
+
+    console.log(`[CDN Extraction] Captured URLS: ${Array.from(capturedUrls)}`);
+
+    return Array.from(capturedUrls).map((url) => ({
+        fileName: decodeURIComponent(url.split("/").pop()?.split("?")[0] || "Document.pdf"),
+        fileType: "pdf",
+        originalUrl: decodeURIComponent(url),
+        storagePath: null,
+        downloadStatus: "skipped",
+        downloadError: null,
+    }));
 }
 
 /**
